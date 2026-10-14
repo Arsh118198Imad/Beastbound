@@ -35,6 +35,16 @@ Everything is generated from code: **no third-party art, audio or paid assets**.
 
 ---
 
+## Play in the browser (web edition)
+
+The `web/` folder contains a **browser version** of the same prototype, built with [three.js](https://threejs.org) (WebGL). It has the same vale, Pebblooms, stealth, binding, battles, partner, Bestiary, menus and saving (saves live in your browser's local storage). No install needed: open the published site, click **New Journey**, then click the game view to capture the mouse.
+
+Run it locally: `cd web && python3 -m http.server 8000`, then open <http://localhost:8000>. (Opening `index.html` directly from disk does not work because browsers block ES modules on `file://`.)
+
+The web edition was tested end-to-end in headless Chromium (title → stealth bind → partner → battle → exhausted bind → Bestiary → defeat/retry → pause/settings → save → continue) with no console errors. Desktop with keyboard & mouse or a gamepad is recommended; touch controls are not implemented yet.
+
+---
+
 ## 1. Install Unity (one time)
 
 1. Download and install **Unity Hub** from <https://unity.com/download>.

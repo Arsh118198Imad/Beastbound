@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Beastbound — Sunmeadow Vale</title>
+  <meta name="description" content="Beastbound: an original third-person creature-bonding adventure. Explore Sunmeadow Vale, sneak up on Pebblooms, battle and bind them. Free, offline, no microtransactions.">
+  <meta name="theme-color" content="#0b1420">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='36' r='22' fill='%238c997f'/%3E%3Cellipse cx='22' cy='14' rx='6' ry='12' fill='%23ff8c9e'/%3E%3Cellipse cx='42' cy='14' rx='6' ry='12' fill='%23ff8c9e'/%3E%3Cpath d='M32 18l5 8-5 6-5-6z' fill='%23ffb840'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="game" tabindex="0" aria-label="Beastbound game view"></canvas>
+
+  <div id="loading">
+    <div>
+      <div class="logo">BEASTBOUND</div>
+      <div class="sub" id="loading-text">Growing Sunmeadow Vale…</div>
+      <div class="bar"><i></i></div>
+    </div>
+  </div>
+
+  <div id="ui">
+    <!-- ============================================================ HUD -->
+    <div id="hud" class="hidden">
+      <div id="vignette"></div>
+      <div id="markers"></div>
+      <div id="damage"></div>
+      <div id="crosshair"></div>
+      <div id="objective" class="panel"><div class="tag">OBJECTIVE</div><div class="t"></div><div class="d"></div></div>
+      <div id="enemy" class="panel hidden"><div class="n"></div><div class="bar"><i></i></div></div>
+      <div id="toasts"></div>
+      <div id="banner"><div class="t"></div><div class="s"></div></div>
+      <div id="prompt" class="panel hidden"><div class="p"></div><div class="q"></div></div>
+      <div id="player-panel" class="panel">
+        <div class="top"><span>Warden</span><span class="status"></span></div>
+        <div class="bar hp"><i></i><b></b></div>
+        <div class="cds"><div class="bar spark"><i></i><b>Ember Spark</b></div><div class="bar dodge"><i></i><b>Dodge</b></div></div>
+        <div class="partner"></div>
+      </div>
+      <div id="hint" class="panel"></div>
+      <div id="fps" class="hidden"></div>
+      <div id="lockhint" class="panel hidden">Click to look around</div>
+    </div>
+
+    <!-- ============================================================ Title -->
+    <div id="title" class="menu-free hidden">
+      <div class="logo">BEASTBOUND</div>
+      <div class="tagline">Sunmeadow Vale · a creature-bonding adventure</div>
+      <div class="menu-col interactive" data-nav>
+        <button class="btn primary" id="btn-continue">Continue Journey</button>
+        <button class="btn" id="btn-new">New Journey</button>
+        <button class="btn" id="btn-settings">Settings</button>
+        <button class="btn" id="btn-controls">Controls</button>
+      </div>
+      <div class="status" id="title-status"></div>
+      <div class="footer">Prototype v0.1 · Free &amp; offline · No microtransactions · Saves stay in your browser</div>
+      <div class="device-note">Best on desktop with keyboard &amp; mouse or a gamepad.</div>
+    </div>
+
+    <!-- ============================================================ Pause -->
+    <div id="pause" class="menu hidden">
+      <div class="card" style="width:min(440px,92vw)" data-nav>
+        <h2>Paused</h2>
+        <div class="stack">
+          <button class="btn primary" data-act="resume">Resume</button>
+          <button class="btn" data-act="bestiary">Bestiary</button>
+          <button class="btn" data-act="settings">Settings</button>
+          <button class="btn" data-act="controls">Controls</button>
+          <button class="btn" data-act="save">Save Journey</button>
+          <button class="btn" data-act="restart">Restart Journey</button>
+          <button class="btn" data-act="title">Title Screen</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================ Settings -->
+    <div id="settings" class="menu hidden">
+      <div class="card" style="width:min(720px,94vw)" data-nav>
+        <h2>Settings</h2>
+        <div class="stack" id="settings-rows"></div>
+        <div class="two"><button class="btn" data-act="reset-settings">Reset to defaults</button><button class="btn primary" data-act="back">Save &amp; Back</button></div>
+      </div>
+    </div>
+
+    <!-- ============================================================ Controls -->
+    <div id="controls" class="menu hidden">
+      <div class="card" style="width:min(1000px,96vw)" data-nav>
+        <h2>Controls &amp; Tips</h2>
+        <div class="controls-grid">
+          <div>
+            <h3>KEYBOARD &amp; MOUSE</h3>
+            <table class="keys">
+              <tr><td>Move</td><td><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></td></tr>
+              <tr><td>Look</td><td>Mouse (click the game to capture it)</td></tr>
+              <tr><td>Run</td><td>Hold <kbd>Shift</kbd></td></tr>
+              <tr><td>Jump</td><td><kbd>Space</kbd></td></tr>
+              <tr><td>Sneak</td><td>Hold <kbd>Ctrl</kbd> or toggle <kbd>C</kbd></td></tr>
+              <tr><td>Staff Strike</td><td>Left mouse or <kbd>J</kbd> (tap for a 3-hit combo)</td></tr>
+              <tr><td>Ember Spark</td><td>Right mouse or <kbd>K</kbd></td></tr>
+              <tr><td>Dodge</td><td><kbd>Q</kbd></td></tr>
+              <tr><td>Bind creature</td><td><kbd>E</kbd></td></tr>
+              <tr><td>Bestiary</td><td><kbd>Tab</kbd></td></tr>
+              <tr><td>Pause</td><td><kbd>Esc</kbd> or <kbd>P</kbd></td></tr>
+              <tr><td>Zoom</td><td>Mouse wheel</td></tr>
+              <tr><td>Controls hint</td><td><kbd>H</kbd></td></tr>
+            </table>
+            <h3 style="margin-top:16px">GAMEPAD</h3>
+            <table class="keys">
+              <tr><td>Move / Look</td><td>Left / right stick</td></tr>
+              <tr><td>Run · Jump · Sneak</td><td>LB · A · R3</td></tr>
+              <tr><td>Strike · Spark · Dodge</td><td>X or RT · Y or LT · B</td></tr>
+              <tr><td>Bind · Bestiary · Pause</td><td>RB · View · Start</td></tr>
+            </table>
+          </div>
+          <div>
+            <h3 class="green">HOW BINDING WORKS</h3>
+            <p>Face a wild creature and press Bind. The exact chance is always shown — what you see is what is rolled.</p>
+            <p>Raise your odds:<br>• Sneak up unnoticed (×1.5) or while it sleeps (×2)<br>• Weaken it first — lower health, higher chance<br>• Exhausted (0 HP) creatures are a guaranteed bind<br>• Every miss adds Resonance (+12% next time)</p>
+            <p>Bind Orbs are free and unlimited.</p>
+            <h3 class="green">STEALTH</h3>
+            <p><b style="color:var(--accent)">?</b> above a creature means it is getting suspicious; <b style="color:var(--accent)">!</b> means it noticed you. Running is loud, sneaking is quiet.</p>
+            <h3 class="green">BATTLE</h3>
+            <p>Watch for the crouch-and-glow wind-up, then Dodge. Ember Spark is extra effective against Verdant creatures.</p>
+          </div>
+        </div>
+        <div style="width:300px;margin:18px auto 0"><button class="btn primary" data-act="back">Back</button></div>
+      </div>
+    </div>
+
+    <!-- ============================================================ Bestiary -->
+    <div id="bestiary" class="menu hidden">
+      <div class="card bestiary" data-nav>
+        <h2>Bestiary</h2>
+        <div class="count"></div>
+        <div class="empty hidden"></div>
+        <div class="layout">
+          <div class="list"></div>
+          <div class="detail">
+            <canvas class="portrait" width="600" height="600"></canvas>
+            <div>
+              <div class="name"></div>
+              <div class="sub"></div>
+              <div class="stats"></div>
+              <div class="personality" style="margin-top:14px;font-size:15px;line-height:1.5"></div>
+            </div>
+            <div class="desc"></div>
+          </div>
+        </div>
+        <div class="two"><button class="btn primary" data-act="partner">Set as Partner</button><button class="btn" data-act="back">Close</button></div>
+      </div>
+    </div>
+
+    <!-- ============================================================ Confirm -->
+    <div id="confirm" class="menu hidden">
+      <div class="card" style="width:min(620px,92vw)" data-nav>
+        <h2 class="ct"></h2>
+        <p class="cm" style="text-align:center;font-size:18px;line-height:1.5;margin:0 0 6px"></p>
+        <div class="two"><button class="btn primary" data-act="yes">Yes</button><button class="btn" data-act="back">Cancel</button></div>
+      </div>
+    </div>
+
+    <!-- ============================================================ Defeat -->
+    <div id="defeat" class="menu hidden">
+      <div class="card" style="width:min(640px,92vw)" data-nav>
+        <h2>You were overwhelmed</h2>
+        <p style="text-align:center;font-size:18px;line-height:1.5;margin:0">No progress is lost. Rest at the Waystone and try again — dodge the glowing wind-ups, use Ember Spark from range, or sneak past.</p>
+        <div class="two"><button class="btn primary" data-act="retry">Try Again</button><button class="btn" data-act="title">Title Screen</button></div>
+      </div>
+    </div>
+  </div>
+
+  <noscript><p style="position:fixed;inset:0;display:grid;place-items:center;color:#fff">Beastbound needs JavaScript and WebGL.</p></noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

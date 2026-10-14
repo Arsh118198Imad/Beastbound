@@ -39,11 +39,13 @@ Everything is generated from code: **no third-party art, audio or paid assets**.
 
 **Play now: <https://tfl-beastbound.vercel.app>**
 
-The `web/` folder contains a **browser version** of the same prototype, built with [three.js](https://threejs.org) (WebGL). It has the same vale, Pebblooms, stealth, binding, battles, partner, Bestiary, menus and saving (saves live in your browser's local storage). No install needed: open the published site, click **New Journey**, then click the game view to capture the mouse.
+The `web/` folder contains a **browser version** of the same prototype, built with [three.js](https://threejs.org) (WebGL). It has the same vale, Pebblooms, stealth, binding, battles, partner, Bestiary, menus and saving (saves live in your browser's local storage). No install needed: open the published site, click **New Game**, then click the game view to capture the mouse.
 
 Run it locally: `cd web && python3 -m http.server 8000`, then open <http://localhost:8000>. (Opening `index.html` directly from disk does not work because browsers block ES modules on `file://`.)
 
 The web edition was tested end-to-end in headless Chromium (title → stealth bind → partner → battle → exhausted bind → Bestiary → defeat/retry → pause/settings → save → continue) with no console errors. Desktop with keyboard & mouse or a gamepad is recommended; touch controls are not implemented yet.
+
+**Visual upgrade, step 0 (web only):** physically based sky with drifting clouds and sky-based ambient lighting, a golden-hour default, reflective water, alpha-cut leaf and needle foliage with wind, a detail-textured terrain, and a cinematic post-processing chain (HDR + MSAA, bloom, sun god rays, sharpening, colour grade, vignette), plus the gold BEASTBOUND title screen. Foliage between the camera and the Warden dissolves so trees never hide the player. Graphics presets: Low turns post-processing off; **Medium is the default** for typical laptops; High/Ultra raise resolution, shadows and grass. The Warden and Pebbloom are still placeholder shapes until the Blender model milestone. Frame rates were only measured in a software renderer here, so check real FPS on your own machine.
 
 ---
 

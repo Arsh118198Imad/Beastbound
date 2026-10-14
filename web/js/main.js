@@ -1,6 +1,6 @@
 // Beastbound (web edition) — game bootstrap, state flow, systems hub and main loop.
-import * as THREE from './vendor/three.module.min.js';
-import { World } from './world.js';
+import * as THREE from 'three';
+import { World, occlusionUniforms } from './world.js';
 import { Player } from './player.js';
 import { OrbitCamera } from './camera.js';
 import { Creature } from './creatures.js';
@@ -11,6 +11,7 @@ import { UI } from './ui.js';
 import { Events } from './events.js';
 import { Saves, FrameCaps } from './save.js';
 import { createRecord, Species, Awareness } from './rules.js';
+import { PostFX } from './render/postfx.js';
 
 const SEED = 20261014;
 
@@ -77,7 +78,7 @@ class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 0.55;
     this.scene = new THREE.Scene();
     this.camera3d = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1500);
     this.input = new Input(this.canvas);
@@ -96,7 +97,9 @@ class Game {
   }
 
   boot() {
-    this.world = new World(this.scene, SEED);
+    this.world = new World(this.scene, SEED, this.renderer);
+    this.world.setHour(17.4); // golden hour for the title vista
+    this.postfx = new PostFX(this.renderer, this.scene, this.camera3d);
     this.player = new Player(this);
     this.camera = new OrbitCamera(this.camera3d);
     this.camera.snap(this.player.position, this.player.yaw);
@@ -126,6 +129,7 @@ class Game {
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setSize(w, h, false);
+    if (this.postfx) this.postfx.setSize(w, h, this.renderer.getPixelRatio());
     this.camera3d.aspect = w / Math.max(1, h);
     this.camera3d.updateProjectionMatrix();
   }
@@ -201,7 +205,7 @@ class Game {
     this.despawnCompanion();
     this.spawnWild();
     this.player.respawn(this.world.playerSpawn, this.world.playerSpawnYaw);
-    this.world.setHour(9.5);
+    this.world.setHour(16.2); // warm late afternoon, like the reference art
     this.playTime = 0;
     this.sessionActive = true;
     this.camera.snap(this.player.position, this.player.yaw);
@@ -313,7 +317,8 @@ class Game {
     }
     this.grassLayers = [1, 2, 3, 3][q];
     this.grassDistance = [45, 60, 80, 120][q];
-    this.scene.fog.density = 0.0042;
+    this.scene.fog.density = 0.0036;
+    this.postfx.setQuality(q);
     this.resize();
   }
   saveSettings() { Saves.saveSettings(this.settings); }
@@ -360,7 +365,14 @@ class Game {
     const focus = this.state === 'title' ? this.world.playerSpawn : this.player.position;
     this.world.update(dt > 0 ? dt : (this.state === 'title' ? realDt : 0), this.camera3d.position, focus, this.grassLayers, this.grassDistance);
     this.audio.update(realDt, this.battle.inBattle && this.state === 'playing', this.world.daylight < 0.3, this.state === 'paused' || this.state === 'defeat');
-    this.renderer.render(this.scene, this.camera3d);
+    // Let foliage between the camera and the Warden dissolve instead of hiding them.
+    this.camera3d.updateMatrixWorld();
+    if (this.state === 'title') occlusionUniforms.uFocusView.value.set(0, 0, 0);
+    else occlusionUniforms.uFocusView.value.copy(this.player.position).setY(this.player.position.y + 1.2).applyMatrix4(this.camera3d.matrixWorldInverse);
+    if (this.postfx && this.postfx.enabled) {
+      this.postfx.update(this.world.realSunDir, this.world.sunColor, this.world.daylight);
+      this.postfx.render();
+    } else this.renderer.render(this.scene, this.camera3d);
     this.ui.updateHud(realDt);
     this.ui.renderPortrait(realDt);
     input.endFrame();

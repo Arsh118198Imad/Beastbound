@@ -9,7 +9,7 @@ export const FrameCaps = [30, 60, 120, 0];
 export function defaultSettings() {
   return {
     mouseSensitivity: 2.2, invertY: false, fov: 60, master: 0.8, sfx: 0.9, music: 0.6,
-    quality: 2, dayLength: 24, showFps: false, showHint: true, frameCap: 3,
+    quality: 1, dayLength: 24, showFps: false, showHint: true, frameCap: 3,
   };
 }
 
@@ -65,7 +65,7 @@ function sanitize(s) {
   s.fov = c(s.fov, 50, 100, 60);
   s.master = c(s.master, 0, 1, 0.8); s.sfx = c(s.sfx, 0, 1, 0.9); s.music = c(s.music, 0, 1, 0.6);
   s.dayLength = c(s.dayLength, 2, 120, 24);
-  s.quality = Number.isInteger(s.quality) && s.quality >= 0 && s.quality < 4 ? s.quality : 2;
+  s.quality = Number.isInteger(s.quality) && s.quality >= 0 && s.quality < 4 ? s.quality : 1;
   s.frameCap = Number.isInteger(s.frameCap) && s.frameCap >= 0 && s.frameCap < FrameCaps.length ? s.frameCap : 3;
   s.invertY = !!s.invertY; s.showFps = !!s.showFps; s.showHint = s.showHint !== false;
   return s;

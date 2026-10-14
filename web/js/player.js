@@ -1,5 +1,5 @@
 // The Warden: movement, combat kit, binding and procedural avatar (port of Runtime/Player).
-import * as THREE from './vendor/three.module.min.js';
+import * as THREE from 'three';
 import { clamp, clamp01, lerp, damp, srgb } from './util.js';
 import { CaptureRules, Element } from './rules.js';
 import { Health, Faction, Targets } from './combat.js';

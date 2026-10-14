@@ -1,5 +1,5 @@
 // Small math + noise helpers shared by every module.
-import * as THREE from './vendor/three.module.min.js';
+import * as THREE from 'three';
 
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const clamp01 = (v) => clamp(v, 0, 1);

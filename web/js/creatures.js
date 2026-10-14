@@ -1,6 +1,6 @@
 // Creatures: Pebbloom model + procedural animation, motor, perception and AI brain.
 // Port of Runtime/Creatures and Runtime/CreatureAI (same states, numbers and personalities).
-import * as THREE from './vendor/three.module.min.js';
+import * as THREE from 'three';
 import { clamp, clamp01, lerp, damp, srgb } from './util.js';
 import { CaptureRules, Awareness, Personality, StatRules, Species } from './rules.js';
 import { Health, Faction, Targets } from './combat.js';

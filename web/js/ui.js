@@ -1,5 +1,5 @@
 // DOM-based UI: HUD, menu stack, settings, Bestiary with live 3D portrait, keyboard/gamepad navigation.
-import * as THREE from './vendor/three.module.min.js';
+import * as THREE from 'three';
 import { Events } from './events.js';
 import { StatRules, Species, CaptureRules } from './rules.js';
 import { buildPebbloom, CreatureAnimator } from './creatures.js';

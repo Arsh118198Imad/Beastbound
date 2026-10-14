@@ -1,5 +1,5 @@
 // Third-person orbit camera with collision, zoom, sprint FOV kick, shake and a title-screen orbit.
-import * as THREE from './vendor/three.module.min.js';
+import * as THREE from 'three';
 import { clamp, lerp, damp } from './util.js';
 import { Layout } from './world.js';
 
@@ -23,13 +23,16 @@ export class OrbitCamera {
   update(dt, game) {
     const cam = this.camera, world = game.world;
     if (this.mode === 'title') {
-      this.orbit += dt * 4 * Math.PI / 180;
-      const f = world.playerSpawn.clone().add(new THREE.Vector3(15, 0, 15));
-      const pos = f.clone().add(new THREE.Vector3(Math.cos(this.orbit) * 55, 0, Math.sin(this.orbit) * 55));
-      pos.y = Math.max(world.heightAt(pos.x, pos.z), 0) + 16;
+      // Slow cinematic drift over the lake toward the low sun (key-art framing).
+      this.orbit += dt;
+      const sway = Math.sin(this.orbit * 0.05);
+      const pos = new THREE.Vector3(70 + sway * 5, 0, -22 + Math.cos(this.orbit * 0.04) * 4);
+      pos.y = Math.max(world.heightAt(pos.x, pos.z), 0) + 15;
       cam.position.copy(pos);
-      cam.lookAt(f.x, f.y + 4, f.z);
-      cam.fov = lerp(cam.fov, 55, damp(3, dt)); cam.updateProjectionMatrix();
+      // Look across the vale toward the setting sun so it rakes the scene and lights the haze.
+      const sd = world.realSunDir || new THREE.Vector3(-0.8, 0.15, 0.45);
+      cam.lookAt(pos.x + sd.x * 100, pos.y - 9 + sway * 1.5, pos.z + sd.z * 100);
+      cam.fov = lerp(cam.fov, 50, damp(3, dt)); cam.updateProjectionMatrix();
       return;
     }
     const input = game.input, player = game.player;

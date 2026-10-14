@@ -9,8 +9,11 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='36' r='22' fill='%238c997f'/%3E%3Cellipse cx='22' cy='14' rx='6' ry='12' fill='%23ff8c9e'/%3E%3Cellipse cx='42' cy='14' rx='6' ry='12' fill='%23ff8c9e'/%3E%3Cpath d='M32 18l5 8-5 6-5-6z' fill='%23ffb840'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Cinzel+Decorative:wght@700;900&family=Fredoka:wght@600;700&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "./js/vendor/three.module.min.js", "three/addons/": "./js/vendor/addons/" } }
+  </script>
 </head>
 <body>
   <canvas id="game" tabindex="0" aria-label="Beastbound game view"></canvas>
@@ -48,13 +51,13 @@
 
     <!-- ============================================================ Title -->
     <div id="title" class="menu-free hidden">
-      <div class="logo">BEASTBOUND</div>
-      <div class="tagline">Sunmeadow Vale · a creature-bonding adventure</div>
+      <div class="logo" aria-label="Beastbound">BEASTBOUND</div>
+      <div class="tagline">BONDS BEYOND SPECIES</div>
       <div class="menu-col interactive" data-nav>
-        <button class="btn primary" id="btn-continue">Continue Journey</button>
-        <button class="btn" id="btn-new">New Journey</button>
-        <button class="btn" id="btn-settings">Settings</button>
-        <button class="btn" id="btn-controls">Controls</button>
+        <button class="title-item" id="btn-continue">Continue</button>
+        <button class="title-item" id="btn-new">New Game</button>
+        <button class="title-item" id="btn-settings">Settings</button>
+        <button class="title-item" id="btn-controls">Controls</button>
       </div>
       <div class="status" id="title-status"></div>
       <div class="footer">Prototype v0.1 · Free &amp; offline · No microtransactions · Saves stay in your browser</div>

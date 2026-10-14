@@ -1,5 +1,5 @@
 // Health, hit detection, projectiles and battle tracking (port of Runtime/Combat).
-import * as THREE from './vendor/three.module.min.js';
+import * as THREE from 'three';
 import { DamageRules, Element } from './rules.js';
 import { Events } from './events.js';
 

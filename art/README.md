@@ -8,6 +8,7 @@ third-party assets. The scripts are re-runnable, so changes are made by editing 
 | `blender/thalorix.py` | Thalorix, the forest guardian (maned wolf-lion, crystal-tipped horns, glowing veins) | `web/assets/models/thalorix.glb` |
 | `blender/pebbloom.py` | Pebbloom, the starter creature (mossy stone plates, petal ears, tail flower, amber crystal) | `web/assets/models/pebbloom.glb` |
 | `blender/warden.py` | The Warden, the player (straw hat, coat and cape, scarf, satchel, staff) | `web/assets/models/warden.glb` |
+| `blender/rocks.py` | Environment kit: six fractured boulders and two chipped cut-stone blocks (intact and broken), with moss, lichen and crevice shading in vertex colour | `web/assets/models/env.glb` |
 | `blender/common.py` | Shared helpers: skin-modifier bodies, fur/hair locks, rocks, texture baking, rigging, glTF export, preview renders | — |
 
 ## How each model is made

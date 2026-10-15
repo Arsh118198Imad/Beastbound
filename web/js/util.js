@@ -125,7 +125,7 @@ export class GeometryBatch {
   /** Adds a THREE geometry transformed by a Matrix4, coloured with a THREE.Color (linear). */
   add(geo, matrix, color, extraValue = 0) {
     const g = geo.index ? geo : geo;
-    const p = g.attributes.position, n = g.attributes.normal;
+    const p = g.attributes.position, n = g.attributes.normal, vc = g.attributes.color;
     const start = this.vertexCount;
     const v = new THREE.Vector3(), nn = new THREE.Vector3();
     const nm = new THREE.Matrix3().getNormalMatrix(matrix);
@@ -134,7 +134,8 @@ export class GeometryBatch {
       this.pos.push(v.x, v.y, v.z);
       if (n) { nn.fromBufferAttribute(n, i).applyMatrix3(nm).normalize(); this.nor.push(nn.x, nn.y, nn.z); }
       else this.nor.push(0, 1, 0);
-      this.col.push(color.r, color.g, color.b);
+      if (vc) this.col.push(color.r * vc.getX(i), color.g * vc.getY(i), color.b * vc.getZ(i));
+      else this.col.push(color.r, color.g, color.b);
       if (this.extra) this.extra.push(extraValue);
     }
     if (g.index) {

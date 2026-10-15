@@ -4,6 +4,7 @@ import { Events } from './events.js';
 import { StatRules, Species, CaptureRules } from './rules.js';
 import { buildCreatureParts, createAnimator } from './creatures.js';
 import { QualityNames, FrameCaps, defaultSettings, Saves } from './save.js';
+import { Navigation } from './hud/navigation.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -15,6 +16,7 @@ export class UI {
     this.changedAt = -1;
     this.hintExpanded = false;
     this.markers = [];
+    this.nav = new Navigation(game, $('#compass'), $('#minimap'));
     this.damage = [];
     this.fps = { frames: 0, time: 0 };
     this.el = {
@@ -256,8 +258,10 @@ export class UI {
     $('.sub', root).textContent = `${sp.name} · ${sp.element} · Level ${r.level} · Vigor ${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}`;
     const bar = (k, v, max, hp) => `<div class="stat"><span>${k}</span><div class="track"><div class="fill ${hp ? 'hp' : ''}" style="width:${Math.min(100, v / max * 100)}%"></div></div><span>${v}</span></div>`;
     $('.stats', root).innerHTML = bar('HP', st.maxHealth, 150, true) + bar('ATK', st.attack, 40) + bar('DEF', st.defense, 40) + bar('SPD', st.speed, 40);
-    $('.personality', root).innerHTML = `<b>${r.personality}</b><br>${esc(StatRules.describe(r.personality))}`;
-    $('.desc', root).innerHTML = `${esc(sp.description)}<br><br><i>Habitat:</i> ${esc(sp.habitat)}<br><i>Lore:</i> ${esc(sp.lore)}<br><i>Moves:</i> ${sp.attacks.map((a) => `${a.name} (${a.element}, power ${a.power})`).join(', ')}`;
+    $('.personality', root).textContent = StatRules.describe(r.personality);
+    const kinds = { melee: 'Close', charge: 'Charge', projectile: 'Ranged' };
+    $('.moves', root).innerHTML = sp.attacks.map((a) => `<div class="move"><span class="el ${a.element.toLowerCase()}">${esc(a.element)}</span><b>${esc(a.name)}</b><small>${kinds[a.kind] || a.kind} · Power ${a.power}</small></div>`).join('');
+    $('.desc', root).innerHTML = `${esc(sp.description)}<br><br><i>Habitat.</i> ${esc(sp.habitat)}<br><i>Lore.</i> ${esc(sp.lore)}`;
     const isPartner = g.collection.partnerUid === uid;
     const pb = $('[data-act=partner]', root);
     pb.disabled = isPartner;
@@ -275,15 +279,18 @@ export class UI {
     const canvas = $('#bestiary .portrait');
     if (!this.portrait) {
       try {
-        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+        // Dramatic studio lighting over a transparent canvas (the dark/crimson backdrop is CSS).
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
         renderer.setPixelRatio(1);
-        renderer.setSize(600, 600, false);
+        renderer.setSize(640, 640, false);
+        renderer.setClearColor(0x000000, 0);
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1;
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x182839);
-        scene.add(new THREE.HemisphereLight(0xdfeeff, 0x3a3428, 1.6));
-        const key = new THREE.DirectionalLight(0xfff1dd, 2.4); key.position.set(2, 3, 3); scene.add(key);
-        const rim = new THREE.DirectionalLight(0x88ddff, 1.6); rim.position.set(-3, 2, -2); scene.add(rim);
+        scene.add(new THREE.HemisphereLight(0xc9d6ff, 0x2a1a14, 0.7));
+        const key = new THREE.DirectionalLight(0xffe2b8, 3.2); key.position.set(2.5, 3.2, 2.6); scene.add(key);
+        const rim = new THREE.DirectionalLight(0x7fc8ff, 3.6); rim.position.set(-2.8, 2.2, -2.6); scene.add(rim);
+        const rim2 = new THREE.DirectionalLight(0xff8a6a, 1.4); rim2.position.set(3, 0.8, -2.5); scene.add(rim2);
         const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 20);
         cam.position.set(0, 1.0, 3.2); cam.lookAt(0, 0.62, 0);
         const turntable = new THREE.Group(); scene.add(turntable);
@@ -364,6 +371,7 @@ export class UI {
     $('#player-panel .partner').textContent = partner ? `Partner: ${partner.nickname || Species[partner.speciesId].name} · Lv ${partner.level} (${partner.personality})` : 'No partner yet';
     const v = p.health.fraction < 0.35 ? (0.35 - p.health.fraction) / 0.35 * (0.75 + 0.25 * Math.sin(g.time * 6)) : 0;
     $('#vignette').style.opacity = v * 0.55;
+    this.nav.update();
     // Objective
     $('#objective .t').textContent = g.objectives.title;
     $('#objective .d').innerHTML = g.objectives.description;

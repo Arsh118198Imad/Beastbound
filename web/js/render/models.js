@@ -3,7 +3,10 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
-const FILES = { thalorix: 'assets/models/thalorix.glb', pebbloom: 'assets/models/pebbloom.glb', warden: 'assets/models/warden.glb' };
+const FILES = {
+  thalorix: 'assets/models/thalorix.glb', pebbloom: 'assets/models/pebbloom.glb', warden: 'assets/models/warden.glb',
+  env: 'assets/models/env.glb', // rocks and cut-stone blocks (static, vertex-coloured)
+};
 const loaded = new Map();
 
 export const Models = {
@@ -30,6 +33,12 @@ export const Models = {
     }));
   },
   has(name) { return loaded.has(name); },
+  /** The geometry of one named mesh inside a loaded model file (static props), or null. */
+  geometry(name, meshName) {
+    const gltf = loaded.get(name);
+    const o = gltf && gltf.scene.getObjectByName(meshName);
+    return o && o.isMesh ? o.geometry : null;
+  },
   /** Independent copy with its own skeleton and materials (so glow can pulse per creature). */
   instance(name) {
     const gltf = loaded.get(name);

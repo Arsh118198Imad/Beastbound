@@ -9,6 +9,7 @@ import { Personality } from './rules.js';
 import { SkySystem } from './render/sky.js';
 import { createWater } from './render/water.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { Models } from './render/models.js';
 
 export const Layout = {
   size: 260,
@@ -410,14 +411,31 @@ export class World {
   // ------------------------------------------------------------------ landmarks
   stoneMat() {
     if (!this._stone) {
-      this._stone = new THREE.MeshStandardMaterial({ color: srgb(0.7, 0.66, 0.58), roughness: 0.9 });
-      this._moss = new THREE.MeshStandardMaterial({ color: srgb(0.45, 0.58, 0.32), roughness: 1 });
+      this.envKit = Models.has('env');
+      if (this.envKit) {
+        // Blender cut-stone blocks: vertex colours carry moss and crevices; detail is added in world space.
+        this._stone = stoneDetailMaterial(new THREE.Color(1, 1, 1));
+        this._moss = stoneDetailMaterial(srgb(0.72, 0.9, 0.55));
+      } else {
+        this._stone = new THREE.MeshStandardMaterial({ color: srgb(0.7, 0.66, 0.58), roughness: 0.9 });
+        this._moss = new THREE.MeshStandardMaterial({ color: srgb(0.45, 0.58, 0.32), roughness: 1 });
+      }
     }
     return this._stone;
   }
 
+  /** Box-shaped stone: a chipped Blender block (stretched to size) when the kit loaded, else a plain box. */
+  blockGeometry(sx, sy, sz) {
+    this.stoneMat();
+    if (this.envKit) {
+      const g = Models.geometry('env', this.rng() < 0.3 ? 'block1' : 'block0');
+      if (g) return g.clone().scale(sx, sy, sz);
+    }
+    return new THREE.BoxGeometry(sx, sy, sz);
+  }
+
   block(parent, x, y, z, sx, sy, sz, rotY, mat, collide = true, rotZ = 0) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat || this.stoneMat());
+    const mesh = new THREE.Mesh(this.blockGeometry(sx, sy, sz), mat || this.stoneMat());
     mesh.position.set(x, y, z);
     mesh.rotation.set(0, rotY, rotZ);
     mesh.castShadow = mesh.receiveShadow = true;
@@ -437,7 +455,7 @@ export class World {
     const g = new THREE.Group();
     g.position.set(wx, wy, wz);
     this.root.add(g);
-    const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.5, 0.7, 8), this.stoneMat());
+    const ped = new THREE.Mesh(flatColors(new THREE.CylinderGeometry(1.15, 1.5, 0.7, 8), 0.16), this.stoneMat());
     ped.position.y = 0.2; ped.castShadow = ped.receiveShadow = true;
     g.add(ped);
     this.addCircle(wx, wz, 1.45, wy + 0.55);
@@ -457,9 +475,11 @@ export class World {
       const broken = i === 2 || i === 5;
       const h = broken ? 1.1 + rng() * 0.5 : 2.4 + rng();
       const s = this.block(g, x, y + h / 2 - 0.2, z, 0.95, h, 0.6, -a + Math.PI / 2, null, true, (rng() - 0.5) * 0.12);
-      const moss = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 6), this._moss);
-      moss.scale.set(1.05, 0.14, 0.7); moss.position.y = h / 2;
-      s.add(moss);
+      if (!this.envKit) {
+        const moss = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 6), this._moss);
+        moss.scale.set(1.05, 0.14, 0.7); moss.position.y = h / 2;
+        s.add(moss);
+      }
       if (broken) this.block(g, x + Math.cos(a + 0.4) * 1.8, y + 0.3, z + Math.sin(a + 0.4) * 1.8, 0.9, 0.6, 1.6, rng() * 3, null, true, 0.1);
     }
   }
@@ -476,8 +496,10 @@ export class World {
     this.block(g, 2.6, 2.4, 0, 1.2, 5.2, 1.2, 0);
     g.updateMatrixWorld();
     const lintel = this.block(g, 0, 5.4, 0, 7, 1, 1.4, 0, st, false, -0.05);
-    const lm = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 6), moss);
-    lm.scale.set(5, 0.3, 1.4); lm.position.y = 0.5; lintel.add(lm);
+    if (!this.envKit) {
+      const lm = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 6), moss);
+      lm.scale.set(5, 0.3, 1.4); lm.position.y = 0.5; lintel.add(lm);
+    }
     this.block(g, -7, 0.8, 4, 5, 1.8, 0.9, 0.26);
     this.block(g, 6.5, 0.6, 5, 4, 1.3, 0.9, -0.35);
     this.block(g, 0.5, 0.5, 9, 6, 1.1, 0.9, 0.05, moss);
@@ -603,7 +625,10 @@ export class World {
   scatterRocks() {
     const rng = this.rng, T = this.terrain;
     const batch = new GeometryBatch();
-    const rocks = [0, 1, 2, 3, 4, 5].map((i) => rockGeometry(this.seed + 200 + i, 0.3, 1));
+    this.stoneMat();
+    const kit = this.envKit ? [0, 1, 2, 3, 4, 5].map((i) => Models.geometry('env', `rock${i}`)) : [];
+    const rocks = kit.length && kit.every(Boolean) ? kit : [0, 1, 2, 3, 4, 5].map((i) => rockGeometry(this.seed + 200 + i, 0.3, 1));
+    const useKit = rocks === kit;
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
     let placed = 0;
     for (let attempt = 0; attempt < 3000 && placed < 110; attempt++) {
@@ -618,7 +643,7 @@ export class World {
       const s = big ? rng.range(2.2, 4.5) : rng.range(0.45, 1.9);
       const sc = new THREE.Vector3(s * rng.range(0.9, 1.4), s * rng.range(0.6, 1), s * rng.range(0.9, 1.3));
       q.setFromEuler(e.set(rng.range(-0.14, 0.14), rng() * 6.28, rng.range(-0.14, 0.14)));
-      const col = rng() < 0.35 ? SW.rockMoss : (rng() < 0.5 ? SW.rock : SW.rockDark);
+      const col = useKit ? new THREE.Color().setScalar(rng.range(0.85, 1.2)) : rng() < 0.35 ? SW.rockMoss : (rng() < 0.5 ? SW.rock : SW.rockDark);
       // Seat the rock on the lowest ground under its footprint so no side hangs in the air.
       const rr = Math.max(sc.x, sc.z) * 0.8;
       const low = Math.min(h, T.heightAt(x + rr, z), T.heightAt(x - rr, z), T.heightAt(x, z + rr), T.heightAt(x, z - rr));
@@ -626,7 +651,9 @@ export class World {
       batch.add(rocks[rng.int(6)], m.compose(new THREE.Vector3(x, y, z), q, sc), col);
       if (s > 0.6) this.addCircle(x, z, Math.min(sc.x, sc.z) * 0.85, y + sc.y * 0.9);
     }
-    const mesh = new THREE.Mesh(batch.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+    const mat = useKit ? stoneDetailMaterial(new THREE.Color(1, 1, 1)) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+    mat.vertexColors = true;
+    const mesh = new THREE.Mesh(batch.build(), mat);
     mesh.castShadow = mesh.receiveShadow = true;
     this.root.add(mesh);
   }
@@ -979,4 +1006,32 @@ function detailTexture(size = 256) {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.NoColorSpace;
   return tex;
+}
+
+let stoneDetailTex = null;
+/** Stone material with tri-planar, world-space detail (grain, pits, lichen speckle) on top of vertex colour. */
+function stoneDetailMaterial(tint) {
+  stoneDetailTex = stoneDetailTex || detailTexture();
+  const mat = new THREE.MeshStandardMaterial({ color: tint, vertexColors: true, roughness: 0.9, metalness: 0 });
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.tDetail = { value: stoneDetailTex };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNrm;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWNrm = normalize(mat3(modelMatrix) * objectNormal);');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D tDetail;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        vec3 bw = pow(abs(normalize(vWNrm)), vec3(4.0)); bw /= dot(bw, vec3(1.0));
+        float d1 = texture2D(tDetail, vWPos.zy * 0.45).r * bw.x + texture2D(tDetail, vWPos.xz * 0.45).r * bw.y + texture2D(tDetail, vWPos.xy * 0.45).r * bw.z;
+        float d2 = texture2D(tDetail, vWPos.zy * 1.9).g * bw.x + texture2D(tDetail, vWPos.xz * 1.9).g * bw.y + texture2D(tDetail, vWPos.xy * 1.9).g * bw.z;
+        diffuseColor.rgb *= mix(0.62, 1.32, d1 * 0.55 + d2 * 0.45);`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor - 0.12 + (vWNrm.y > 0.6 ? 0.08 : 0.0), 0.5, 1.0);');
+  };
+  return mat;
+}
+
+/** Adds a uniform grey vertex-colour attribute so plain geometry works with vertex-coloured materials. */
+function flatColors(geo, value = 1) {
+  if (!geo.attributes.color) geo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count * 3).fill(value), 3));
+  return geo;
 }

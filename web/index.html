@@ -33,6 +33,8 @@
       <div id="markers"></div>
       <div id="damage"></div>
       <div id="crosshair"></div>
+      <div id="compass" class="panel" aria-hidden="true"><div class="strip"></div><i class="needle"></i></div>
+      <div id="minimap-wrap" aria-hidden="true"><canvas id="minimap" width="200" height="200"></canvas></div>
       <div id="objective" class="panel"><div class="tag">OBJECTIVE</div><div class="t"></div><div class="d"></div></div>
       <div id="enemy" class="panel hidden"><div class="n"></div><div class="bar"><i></i></div></div>
       <div id="toasts"></div>
@@ -137,19 +139,19 @@
     <!-- ============================================================ Bestiary -->
     <div id="bestiary" class="menu hidden">
       <div class="card bestiary" data-nav>
-        <h2>Bestiary</h2>
-        <div class="count"></div>
+        <div class="b-head"><h2>Bestiary</h2><div class="count"></div></div>
         <div class="empty hidden"></div>
         <div class="layout">
           <div class="list"></div>
-          <div class="detail">
-            <canvas class="portrait" width="600" height="600"></canvas>
-            <div>
-              <div class="name"></div>
-              <div class="sub"></div>
-              <div class="stats"></div>
-              <div class="personality" style="margin-top:14px;font-size:15px;line-height:1.5"></div>
-            </div>
+          <div class="stage"><canvas class="portrait" width="640" height="640"></canvas></div>
+          <div class="info">
+            <div class="name"></div>
+            <div class="sub"></div>
+            <div class="stats"></div>
+            <h4>Abilities</h4>
+            <div class="moves"></div>
+            <h4>Temperament</h4>
+            <div class="personality"></div>
             <div class="desc"></div>
           </div>
         </div>

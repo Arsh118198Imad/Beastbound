@@ -5,6 +5,7 @@ import { CaptureRules, Element } from './rules.js';
 import { Health, Faction, Targets } from './combat.js';
 import { Events } from './events.js';
 import { Layout } from './world.js';
+import { Models, BonePoser } from './render/models.js';
 
 const toRad = Math.PI / 180;
 const quat = (x, y, z) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x * toRad, y * toRad, z * toRad, 'YXZ'));
@@ -118,6 +119,89 @@ class Avatar {
   }
 }
 
+/**
+ * The Blender-made Warden (skinned .glb) driven procedurally with the same interface as Avatar:
+ * walk/run/sneak, jump, landing squash, three-hit staff combo, cast, throw, dodge roll, hurt, defeat.
+ * Angles are model-space degrees: +x pitches forward (a hanging limb swings back), y turns, z rolls.
+ */
+class SkinnedAvatar {
+  constructor(group, model) {
+    this.root = pivot(group, [0, 0, 0]);
+    this.root.add(model.root);
+    this.b = model.bones;
+    this.pose = new BonePoser(this.root, model.bones);
+    this.glow = model.materials.find((m) => m.name === 'WardenCrystal') || new THREE.MeshStandardMaterial();
+    this.glowBase = this.glow.emissiveIntensity || 1;
+    this.phase = 0; this.crouch = 0; this.lean = 0;
+    this.strike = 0; this.strikeIndex = 0; this.cast = 0; this.throw = 0; this.dodge = 0; this.hurt = 0; this.land = 0; this.defeat = 0;
+  }
+  reset() { this.strike = this.cast = this.throw = this.dodge = this.hurt = this.land = 0; this.defeat = 0; }
+
+  update(dt, t, s) {
+    const P = this.pose;
+    const move = clamp01(s.speed / 7), walk = clamp01(s.speed / 1.2);
+    this.phase += dt * s.speed * (s.sneaking ? 3.4 : 2.6);
+    this.crouch += clamp((s.sneaking ? 1 : 0) - this.crouch, -dt * 5, dt * 5);
+    this.lean = lerp(this.lean, move * 10 + this.crouch * 16, damp(8, dt));
+    this.defeat += clamp((s.dead ? 1 : 0) - this.defeat, -dt * 2.5, dt * 2.5);
+    const c = this.crouch, sin = Math.sin(this.phase), cos = Math.cos(this.phase);
+    const bob = s.grounded ? Math.abs(sin) * 0.05 * walk : 0;
+    let squash = 0;
+    if (this.land > 0) { this.land -= dt; squash = Math.sin(this.land / 0.15 * Math.PI) * 0.08; }
+    let flinch = 0;
+    if (this.hurt > 0) { this.hurt -= dt; flinch = Math.sin(this.hurt / 0.25 * Math.PI) * -16; }
+    P.offset('hips', 0, bob - c * 0.2 - squash - (s.wading ? 0.04 : 0), 0);
+    const twist = sin * 7 * move;
+    P.set('hips', 0, twist * 0.6, 0);
+    P.set('torso', this.lean + flinch, -twist, 0);
+    P.set('head', -this.lean * 0.6 - flinch * 0.3, twist * 0.5, 0);
+
+    // Legs: hip swing, knee bend on the forward swing, crouch keeps the feet planted.
+    const amp = lerp(26, 46, move) * walk * (1 - c * 0.45);
+    if (s.grounded) {
+      for (const [side, ph] of [['L', 0], ['R', Math.PI]]) {
+        const sw = Math.sin(this.phase + ph), lift = Math.max(0, Math.cos(this.phase + ph));
+        P.set(`leg${side}`, -sw * amp - c * 38 - this.lean * 0.3);
+        P.set(`shin${side}`, lift * amp * (1.2 - c * 0.6) + c * 62 + walk * 6);
+        P.set(`foot${side}`, -c * 22 - lift * 10);
+      }
+    } else {
+      const k = s.vy > 0 ? 1 : 0.6;
+      P.set('legL', -40 * k); P.set('shinL', 70 * k); P.set('footL', -10);
+      P.set('legR', 15 * k); P.set('shinR', 35 * k); P.set('footR', 0);
+    }
+
+    // Arms: counter-swing, elbows soft; actions override the right (staff) arm.
+    const asw = sin * amp * 0.7;
+    let aL = [asw + c * 15, 0, 6 + (s.grounded ? 0 : 30)], aR = [-asw + c * 15, 0, -6 - (s.grounded ? 0 : 30)];
+    let fL = -12 - 18 * move, fR = -14 - 18 * move;
+    if (this.strike > 0) {
+      this.strike -= dt;
+      const k = 1 - clamp01(this.strike / 0.42), w = k < 0.35 ? THREE.MathUtils.smoothstep(k / 0.35, 0, 1) : 1;
+      if (this.strikeIndex === 0) aR = [lerp(-130, -20, w), lerp(40, -30, w), -20];
+      else if (this.strikeIndex === 1) aR = [-80, lerp(-60, 60, w), -30];
+      else aR = [lerp(-190, -10, w), 0, -5];
+      fR = -10; aL = [-30, 0, 20]; fL = -40;
+    } else if (this.cast > 0) { this.cast -= dt; aR = [-95, 0, -5]; aL = [-80, 0, 5]; fR = -5; fL = -5; }
+    else if (this.throw > 0) { this.throw -= dt; aR = [lerp(-170, -40, THREE.MathUtils.smoothstep(1 - clamp01(this.throw / 0.4), 0, 1)), 0, -10]; fR = -5; }
+    P.set('armL', ...aL); P.set('armR', ...aR);
+    P.set('forearmL', fL); P.set('forearmR', fR);
+
+    // Root: dodge roll and defeat fall.
+    let rootQ = new THREE.Quaternion(), ry = 0;
+    if (this.dodge > 0) {
+      this.dodge -= dt;
+      const k = 1 - clamp01(this.dodge / 0.3);
+      rootQ = quat(k * 360, 0, 0); ry = Math.sin(k * Math.PI) * 0.45;
+      P.offset('hips', 0, -Math.sin(k * Math.PI) * 0.35, 0);
+    }
+    if (this.defeat > 0) { rootQ.slerp(quat(-80, 0, 0), this.defeat); ry += 0.25 * this.defeat; }
+    this.root.quaternion.copy(rootQ);
+    this.root.position.y = ry;
+    this.glow.emissiveIntensity = this.glowBase * (0.6 + Math.sin(t * 3) * 0.08 + (this.cast > 0 ? 1.0 : 0) + (this.throw > 0 ? 0.6 : 0));
+  }
+}
+
 // ====================================================================== Player
 
 export class Player {
@@ -135,7 +219,8 @@ export class Player {
     this.health.onDamaged.push((info) => this.onDamaged(info));
     this.group = new THREE.Group();
     game.scene.add(this.group);
-    this.avatar = new Avatar(this.group);
+    const wardenModel = Models.instance('warden');
+    this.avatar = wardenModel ? new SkinnedAvatar(this.group, wardenModel) : new Avatar(this.group);
     Targets.list.add(this);
     // combat
     this.attackStat = 12; this.comboPower = [10, 10, 16];

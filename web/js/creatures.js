@@ -5,7 +5,7 @@ import { clamp, clamp01, lerp, damp, srgb } from './util.js';
 import { CaptureRules, Awareness, Personality, StatRules, Species } from './rules.js';
 import { Health, Faction, Targets } from './combat.js';
 import { Events } from './events.js';
-import { Models } from './render/models.js';
+import { Models, BonePoser } from './render/models.js';
 
 const SPHERE = new THREE.SphereGeometry(0.5, 18, 12);
 const CAPSULE = new THREE.CapsuleGeometry(0.5, 1, 6, 12);
@@ -163,24 +163,34 @@ export class CreatureAnimator {
   }
 }
 
+// Per-species tuning for the skinned models (Blender .glb) and their procedural animation.
+const MODEL_CFG = {
+  thalorix: { scale: 1.2, lieDrop: 0.6, bob: 0.05, hop: false, stride: 1, lieHead: 1 },   // a guardian: shoulder about the Warden's chest
+  pebbloom: { scale: 1.0, lieDrop: 0.2, bob: 0.08, hop: true, stride: 1.7, lieHead: 0.3 },  // hops like the original
+};
+
 /** Picks the model for a species: Blender .glb when loaded, primitive Pebbloom otherwise. */
 export function buildCreatureParts(speciesId, variant = 0) {
-  if (speciesId === 'thalorix') {
-    const m = Models.instance('thalorix');
-    if (m) {
-      const root = new THREE.Group();
-      const scale = 1.2; // a guardian: noticeably larger than the Warden's knee-high Pebblooms
-      m.root.scale.setScalar(scale);
-      root.add(m.root);
-      const glowMats = m.materials.filter((x) => x.emissive && (x.emissiveMap || x.emissive.getHex() !== 0));
-      for (const mat of glowMats) mat.userData.baseEmissive = mat.emissiveIntensity;
-      return { root, bones: m.bones, glowMats, skinned: true, scale };
+  const cfg = MODEL_CFG[speciesId];
+  const m = cfg && Models.instance(speciesId);
+  if (m) {
+    const root = new THREE.Group();
+    m.root.scale.setScalar(cfg.scale);
+    root.add(m.root);
+    // Individual colour variation, like the primitive model's per-uid tint.
+    const tint = ((variant % 8) / 8 - 0.5) * 0.08;
+    for (const mat of m.materials) {
+      if (!/Fur/.test(mat.name)) continue;
+      const hsl = {}; mat.color.getHSL(hsl);
+      mat.color.setHSL((hsl.h + tint * 0.5 + 1) % 1, hsl.s, clamp01(hsl.l + tint * 0.5));
     }
-    const fallback = buildPebbloom(variant);
-    fallback.root.scale.setScalar(1.6);
-    return fallback;
+    const glowMats = m.materials.filter((x) => !/Shine/.test(x.name) && x.emissive && (x.emissiveMap || x.emissive.getHex() !== 0));
+    for (const mat of glowMats) mat.userData.baseEmissive = mat.emissiveIntensity;
+    return { root, bones: m.bones, glowMats, skinned: true, scale: cfg.scale, cfg };
   }
-  return buildPebbloom(variant);
+  const fallback = buildPebbloom(variant);
+  if (speciesId === 'thalorix') fallback.root.scale.setScalar(1.6);
+  return fallback;
 }
 
 export function createAnimator(parts, maxSpeed) {
@@ -197,37 +207,23 @@ export class QuadrupedAnimator {
     this.p = parts; this.maxSpeed = maxSpeed;
     this.speed = 0; this.smoothed = 0; this.phase = Math.random() * 10; this.pose = 'Normal';
     this.hurt = 0; this.lunge = 0; this.happy = 0; this.blend = 0; this.glow = 0; this.windup = 0; this.alert = 0;
-    parts.root.updateMatrixWorld(true);
-    this.rest = {}; this.parentRot = {};
-    const tmp = new THREE.Quaternion();
-    for (const [name, b] of Object.entries(parts.bones)) {
-      this.rest[name] = b.quaternion.clone();
-      b.parent.getWorldQuaternion(tmp);
-      this.parentRot[name] = tmp.clone();
-    }
-    this.q = new THREE.Quaternion(); this.e = new THREE.Euler();
+    this.poser = new BonePoser(parts.root, parts.bones);
     this.s = parts.scale || 1;
+    this.cfg = parts.cfg || MODEL_CFG.thalorix;
   }
   playHurt() { this.hurt = 0.25; }
   playLunge() { this.lunge = 0.3; }
   playHappy() { this.happy = 0.8; }
   addGlow(a) { this.glow = Math.max(this.glow, a); }
 
-  /** Rotates a bone by model-space angles in degrees (x pitches down, y turns, z rolls). */
-  set(name, x, y = 0, z = 0) {
-    const b = this.p.bones[name];
-    if (!b) return;
-    const P = this.parentRot[name];
-    this.q.setFromEuler(this.e.set(x * toRad, y * toRad, z * toRad, 'YXZ'));
-    b.quaternion.copy(P).invert().multiply(this.q).multiply(P).multiply(this.rest[name]);
-  }
+  set(name, x, y = 0, z = 0) { this.poser.set(name, x, y, z); }
 
   update(dt, t) {
     const p = this.p;
     this.smoothed = lerp(this.smoothed, this.speed, damp(8, dt));
     const move = clamp01(this.smoothed / Math.max(0.1, this.maxSpeed));
     const walk = clamp01(this.smoothed / 0.8);
-    if (this.smoothed > 0.05) this.phase += dt * (3.2 + this.smoothed * 1.5);
+    if (this.smoothed > 0.05) this.phase += dt * (3.2 + this.smoothed * 1.5) * this.cfg.stride;
     const sleeping = this.pose === 'Sleeping', exhausted = this.pose === 'Exhausted', low = sleeping || exhausted;
     this.blend += clamp((low ? 1 : 0) - this.blend, -dt * 1.6, dt * 1.6);
     this.windup += clamp((this.pose === 'Windup' ? 1 : 0) - this.windup, -dt * 6, dt * 6);
@@ -238,7 +234,9 @@ export class QuadrupedAnimator {
     // Root: trot bounce, lie down, crouch, lunge, hurt squash, binding shake.
     let happyHop = 0;
     if (this.happy > 0) { this.happy -= dt; happyHop = Math.abs(Math.sin(this.happy * 10)) * 0.22; }
-    let y = (Math.abs(Math.cos(this.phase)) - 0.5) * 0.05 * walk * up + happyHop - 0.6 * L - 0.1 * W, z = -0.1 * W;
+    const cfg = this.cfg;
+    const gait = cfg.hop ? Math.abs(Math.sin(this.phase)) : Math.abs(Math.cos(this.phase)) - 0.5;
+    let y = gait * cfg.bob * walk * up + happyHop - cfg.lieDrop * L - 0.1 * W, z = -0.1 * W;
     if (this.lunge > 0) { this.lunge -= dt; z += Math.sin(this.lunge / 0.3 * Math.PI) * 0.6; }
     p.root.position.set(0, y * this.s, z * this.s);
     let sx = 1, sy = 1 + breathe * 0.012, sz = 1;
@@ -255,8 +253,9 @@ export class QuadrupedAnimator {
     this.set('chest', 4 * W, -sway * 0.5, 0);
     const look = Math.sin(t * 0.45) * 22 * (1 - move) * up * (1 - A);
     const nod = Math.sin(this.phase * 2) * 3 * walk;
-    this.set('neck', -10 * A + 16 * W + 18 * L + (exhausted ? 22 * L : 0) + breathe * 1.5, look * 0.4, 0);
-    this.set('head', nod - 6 * A + 12 * W + 10 * L, look * 0.6, Math.sin(t * 0.3) * 3 * up + (sleeping ? 14 * L : 0));
+    const lh = cfg.lieHead;
+    this.set('neck', -10 * A + 16 * W + (18 * L + (exhausted ? 22 * L : 0)) * lh + breathe * 1.5, look * 0.4, 0);
+    this.set('head', nod - 6 * A + 12 * W + 10 * L * lh, look * 0.6, Math.sin(t * 0.3) * 3 * up + (sleeping ? 14 * L : 0));
 
     // Ears: perk forward when alert, pin back during a wind-up, droop when resting.
     const flick = Math.sin(t * 1.3 + 1) * 4 + (((t * 0.37) % 3) < 0.12 ? 18 : 0);
@@ -292,6 +291,7 @@ export class QuadrupedAnimator {
     const blink = ((t + this.phase * 0.01) % 4.3) < 0.13 ? 0.1 : 1;
     const open = sleeping ? 0.04 : exhausted ? 0.45 : blink;
     for (const e of ['eyeL', 'eyeR']) if (p.bones[e]) p.bones[e].scale.setScalar(open);
+    if (p.bones.bloom) p.bones.bloom.scale.setScalar(lerp(1, 0.6, L)); // the tail-flower closes while resting
     this.glow = Math.max(0, this.glow - dt * 1.5);
     let pulse = 0.85 + Math.sin(t * 1.6) * 0.15 + this.glow * 1.5;
     if (sleeping) pulse *= 0.35;

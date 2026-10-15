@@ -295,7 +295,7 @@ export class UI {
     if (p.model) p.turntable.remove(p.model.root);
     p.model = buildCreatureParts(record.speciesId, hash(record.uid) & 7);
     const big = record.speciesId === 'thalorix';
-    p.turntable.scale.setScalar(big ? 0.62 : 1);
+    p.turntable.scale.setScalar(big ? 0.55 : 1);
     p.turntable.add(p.model.root);
     p.anim = createAnimator(p.model, 5.6);
     p.uid = record.uid;

@@ -480,3 +480,57 @@ def preview_render(path, target, distance=4.0, height=1.2, yaw_deg=35, size=(128
 
 def rng(seed):
     return random.Random(seed)
+
+
+def colorize(obj, fn):
+    """Per-vertex colour (linear RGB) in the 'Col' attribute, exported to glTF as COLOR_0."""
+    me = obj.data
+    attr = me.color_attributes.get("Col") or me.color_attributes.new("Col", "FLOAT_COLOR", "POINT")
+    for v in me.vertices:
+        attr.data[v.index].color = (*fn(v.co), 1.0)
+
+
+def fur_clump(name, root, direction, length, radius, rnd, droop=0.25, sides=5, segs=5):
+    """A tapered, curved lock of fur/hair (or a leaf) from root along direction."""
+    d = direction.normalized()
+    side = d.cross(Vector((0, 0, 1)))
+    side = side.normalized() if side.length > 1e-4 else Vector((1, 0, 0))
+    bend = Vector((0, 0, -1)) * droop * length + side * rnd.uniform(-0.12, 0.12) * length
+    p0, p3 = root, root + d * length + bend
+    p1, p2 = root + d * length * 0.35, root + d * length * 0.75 + bend * 0.4
+    pts = bezier_points(p0, p1, p2, p3, segs)
+    radii = [radius * (1 - i / (segs - 1)) ** 0.8 + 0.002 for i in range(segs)]
+    return tube_from_points(name, pts, radii, sides=sides)
+
+
+def vcol_material(name, roughness, metallic=0.0):
+    mat = bpy.data.materials.new(name)
+    N = Nodes(mat)
+    bsdf = N.add("ShaderNodeBsdfPrincipled", (500, 0))
+    a = N.add("ShaderNodeVertexColor")
+    a.layer_name = "Col"
+    N.link(a.outputs["Color"], bsdf.inputs["Base Color"])
+    bsdf.inputs["Roughness"].default_value = roughness
+    bsdf.inputs["Metallic"].default_value = metallic
+    N.link(bsdf.outputs[0], N.out.inputs["Surface"])
+    return mat
+
+
+def rock_mesh(name, center, size, rnd, detail=2, flatten=1.0):
+    """Lumpy, noise-displaced rock (icosphere) with a flattened base; returns the object."""
+    bm = bmesh.new()
+    bmesh.ops.create_icosphere(bm, subdivisions=detail, radius=1.0)
+    ox, oy, oz = (rnd.uniform(0, 100) for _ in range(3))
+    for v in bm.verts:
+        p = v.co
+        n = (math.sin(p.x * 3.1 + ox) * math.sin(p.y * 2.7 + oy) * math.sin(p.z * 3.3 + oz)) * 0.18
+        n += (math.sin(p.x * 7.3 + oy) * math.sin(p.y * 6.1 + oz) * math.sin(p.z * 7.7 + ox)) * 0.06
+        q = p * (1 + n)
+        q.z *= flatten
+        v.co = Vector((q.x * size[0], q.y * size[1], q.z * size[2])) + Vector(center)
+    me = bpy.data.meshes.new(name)
+    bm.to_mesh(me)
+    bm.free()
+    obj = link(bpy.data.objects.new(name, me))
+    shade_smooth(obj)
+    return obj

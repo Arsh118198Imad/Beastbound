@@ -5,6 +5,7 @@ import { StatRules, Species, CaptureRules } from './rules.js';
 import { buildCreatureParts, createAnimator } from './creatures.js';
 import { QualityNames, FrameCaps, defaultSettings, Saves } from './save.js';
 import { Navigation } from './hud/navigation.js';
+import { ArtStyles } from './render/style.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -212,6 +213,7 @@ export class UI {
     slider('Master volume', 'master', 0, 1, 0.01, pct);
     slider('Effects & ambience', 'sfx', 0, 1, 0.01, pct);
     slider('Music', 'music', 0, 1, 0.01, pct);
+    cycle('Art style (reloads)', 'artStyle', ArtStyles);
     cycle('Graphics quality', 'quality', QualityNames);
     cycle('Frame cap', 'frameCap', FrameCaps.map((c) => (c ? `${c} FPS` : 'Unlimited (display rate)')));
     slider('Day length (minutes)', 'dayLength', 2, 120, 1, (v) => `${Math.round(v)}`);

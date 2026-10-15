@@ -1,6 +1,7 @@
 // Physical sky (three.js Sky addon), a drifting cloud layer, and image-based lighting from the sky.
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
+import { ArtStyle } from './style.js';
 
 const CLOUD_VS = `
 varying vec3 vDir;
@@ -104,7 +105,7 @@ export class SkySystem {
       if (this.envTarget) this.envTarget.dispose();
       this.envTarget = this.pmrem.fromScene(this.envScene, 0, 0.1, 200);
       this.scene.environment = this.envTarget.texture;
-      this.scene.environmentIntensity = THREE.MathUtils.lerp(0.55, 0.22, night);
+      this.scene.environmentIntensity = THREE.MathUtils.lerp(0.55, 0.22, night) * (ArtStyle.stylized ? 1.35 : 1);
     }
   }
 }

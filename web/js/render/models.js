@@ -2,12 +2,14 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { addOutlines } from './style.js';
 
 const FILES = {
   thalorix: 'assets/models/thalorix.glb', pebbloom: 'assets/models/pebbloom.glb', warden: 'assets/models/warden.glb',
   env: 'assets/models/env.glb', // rocks and cut-stone blocks (static, vertex-coloured)
 };
 const loaded = new Map();
+const OUTLINE = { thalorix: 0.011, pebbloom: 0.009, warden: 0.007 }; // ink line width in model units
 
 export const Models = {
   /** Loads every model; a model that fails to load is simply unavailable (callers fall back). */
@@ -52,6 +54,7 @@ export const Models = {
     });
     const bones = {};
     root.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+    addOutlines(root, OUTLINE[name] || 0.009); // stylized art style only
     return { root, bones, materials: [...materials.values()] };
   },
 };

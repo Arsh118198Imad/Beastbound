@@ -10,6 +10,7 @@ import { SkySystem } from './render/sky.js';
 import { createWater } from './render/water.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Models } from './render/models.js';
+import { ArtStyle } from './render/style.js';
 
 export const Layout = {
   size: 260,
@@ -799,20 +800,18 @@ export class World {
     this.realSunDir = new THREE.Vector3(Math.cos(sunAngle) * 0.8, Math.sin(sunAngle), 0.45).normalize();
     const t = this.daylight;
     const dusk = 1 - Math.abs(elevation * 2.2 - 0.35) * 1.4; // peaks near sunrise/sunset
-    const warm = clamp01(dusk) * (moon ? 0 : 1);
+    const toon = ArtStyle.stylized;
+    const warm = clamp01(dusk) * (moon ? 0 : 1) * (toon ? 0.6 : 1); // stylized: cleaner, less orange light
     const sunCol = new THREE.Color().lerpColors(srgb(1, 0.93, 0.8), srgb(1, 0.62, 0.32), warm);
     if (moon) sunCol.copy(srgb(0.55, 0.65, 1));
     this.sun.color.copy(sunCol);
     this.sun.intensity = moon ? 0.9 : lerp(2.2, 4.2, clamp01(elevation * 1.6));
     this.hemi.color.lerpColors(srgb(0.32, 0.4, 0.66), srgb(0.72, 0.84, 1), t); // blue, readable nights
     this.hemi.groundColor.lerpColors(srgb(0.1, 0.12, 0.18), srgb(0.35, 0.33, 0.24), t);
-    this.hemi.intensity = lerp(1.05, 1.15, t);
-    const top = new THREE.Color().lerpColors(srgb(0.02, 0.04, 0.12), srgb(0.24, 0.5, 0.86), t);
     const horizon = new THREE.Color().lerpColors(srgb(0.08, 0.12, 0.24), srgb(0.72, 0.84, 0.95), t).lerp(srgb(1, 0.6, 0.42), warm * 0.6);
     this.sunColor = sunCol;
-    this.hemi.intensity = lerp(0.35, 0.4, t);
-    this.scene.fog.color.copy(horizon).lerp(srgb(0.9, 0.74, 0.55), 0.35 + warm * 0.45); // warm atmospheric haze
-    void top;
+    this.hemi.intensity = toon ? lerp(0.5, 0.78, t) : lerp(0.35, 0.4, t); // cel shading needs a brighter fill
+    this.scene.fog.color.copy(horizon).lerp(srgb(0.9, 0.74, 0.55), (toon ? 0.2 : 0.35) + warm * 0.45); // atmospheric haze
     this.moteMat.color.copy(t < 0.35 ? srgb(0.75, 1, 0.45) : srgb(1, 0.95, 0.7));
     this.moteMat.size = t < 0.35 ? 0.28 : 0.16;
   }

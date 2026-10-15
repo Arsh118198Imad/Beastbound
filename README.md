@@ -49,6 +49,8 @@ The web edition was tested end-to-end in headless Chromium (title → stealth bi
 
 **Blender models (web edition):** the Warden, the Pebbloom and a new creature, **Thalorix** (a maned forest guardian in the western woods), are now original rigged 3D models built by the scripts in [`art/blender/`](art/README.md) and loaded as `.glb` files. They are animated procedurally in code (walk/run/sneak, combo, cast, dodge; creature gait, sleep, wind-up, lunge, hurt). Boulders, the Waystone ring and the old ruins use a Blender stone kit (fractured rocks and chipped, mossy blocks with world-space stone detail). If a model file fails to load, the game falls back to the old primitive shapes. Trees are still procedural, and the Unity project has not been updated with these models yet.
 
+**Art style (web edition):** the default is **Stylized**, a bright, cel-shaded look with soft two-step lighting, ink outlines on the Warden and creatures, and a cleaner colour grade. **Realistic** (smooth physically based lighting) is still available under Settings → Art style; switching saves your journey and reloads the page.
+
 **Interface (web edition):** a dark-and-gold theme with serif headings, a compass strip with landmark markers (Waystone, ruins, lake, the guardian's woods), a circular minimap that turns with the camera, and a redesigned Bestiary (creature list, lit 3D portrait on a stage, stats, abilities with element tags, temperament and lore).
 
 ---

@@ -5,6 +5,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ArtStyle } from './style.js';
 
 const CinematicShader = {
   uniforms: {
@@ -91,6 +92,12 @@ export class PostFX {
     this.bloom.enabled = q >= 1;
     this.cine.uniforms.godRays.value = q >= 1 ? 1 : 0;
     this.cine.uniforms.sharpen.value = q >= 2 ? 0.4 : 0.25;
+    if (ArtStyle.stylized) {
+      // Brighter, cleaner grade: more colour, light vignette, gentler sharpening and sun shafts.
+      const u = this.cine.uniforms;
+      u.saturation.value = 1.24; u.vignette.value = 0.28; u.sharpen.value *= 0.6; u.tint.value.setRGB(1.0, 1.0, 0.98);
+      this.rayScale = 0.6;
+    } else this.rayScale = 1;
   }
 
   update(sunDir, sunColor, daylight) {
@@ -101,7 +108,7 @@ export class PostFX {
     const facing = forward.dot(sunDir);
     const onScreen = 1 - THREE.MathUtils.smoothstep(Math.max(Math.abs(p.x), Math.abs(p.y)), 1.0, 1.8);
     this.cine.uniforms.sunUv.value.set(p.x * 0.5 + 0.5, p.y * 0.5 + 0.5);
-    this.cine.uniforms.sunStrength.value = facing > 0 ? THREE.MathUtils.smoothstep(facing, 0.0, 0.5) * onScreen * daylight : 0;
+    this.cine.uniforms.sunStrength.value = facing > 0 ? THREE.MathUtils.smoothstep(facing, 0.0, 0.5) * onScreen * daylight * (this.rayScale ?? 1) : 0;
     this.cine.uniforms.rayColor.value.copy(sunColor);
   }
 

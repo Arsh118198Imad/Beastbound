@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { World, occlusionUniforms } from './world.js';
 import { Models } from './render/models.js';
+import { applyArtStyle, ArtStyle } from './render/style.js';
 import { Player } from './player.js';
 import { OrbitCamera } from './camera.js';
 import { Creature } from './creatures.js';
@@ -85,12 +86,14 @@ class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.55;
+    this.renderer.toneMappingExposure = 0.55; // raised for the stylized art style in applySettings
     this.scene = new THREE.Scene();
     this.camera3d = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1500);
     this.input = new Input(this.canvas);
     this.audio = new AudioSystem();
     this.settings = Saves.loadSettings();
+    applyArtStyle(this.settings.artStyle); // must run before any shader compiles
+    this.bootArtStyle = this.settings.artStyle;
     this.state = 'boot';
     this.time = 0; this.dt = 0; this.frame = 0; this.playTime = 0; this.playStart = 0;
     this.hitStopUntil = 0; this.lastRender = 0; this.nextAutosave = 0;
@@ -324,11 +327,19 @@ class Game {
     }
     this.grassLayers = [1, 2, 3, 3][q];
     this.grassDistance = [45, 60, 80, 120][q];
-    this.scene.fog.density = 0.0036;
+    this.scene.fog.density = ArtStyle.stylized ? 0.0027 : 0.0036;
+    this.renderer.toneMappingExposure = ArtStyle.stylized ? 0.6 : 0.55;
     this.postfx.setQuality(q);
     this.resize();
   }
-  saveSettings() { Saves.saveSettings(this.settings); }
+  saveSettings() {
+    Saves.saveSettings(this.settings);
+    if (this.settings.artStyle !== this.bootArtStyle) {
+      // Shaders are built for one art style, so switching restarts the page (progress is saved first).
+      if (this.state === 'playing' || this.state === 'paused') this.saveGame(true);
+      window.location.reload();
+    }
+  }
 
   // ------------------------------------------------------------------ loop
   loop(now) {

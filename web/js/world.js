@@ -717,8 +717,8 @@ export class World {
     const rng = this.rng, T = this.terrain;
     const batch = new GeometryBatch();
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
-    const stem = new THREE.CylinderGeometry(0.01, 0.014, 0.32, 4).translate(0, 0.16, 0);
-    const head = new THREE.OctahedronGeometry(0.08, 0);
+    const flowers = new CardBatch();
+    const UP = new THREE.Vector3(0, 1, 0);
     const reed = new THREE.ConeGeometry(0.035, 1.3, 4).translate(0, 0.65, 0);
     const mstem = new THREE.CylinderGeometry(0.04, 0.05, 0.18, 6).translate(0, 0.09, 0);
     const cap = new THREE.SphereGeometry(0.5, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2);
@@ -727,11 +727,15 @@ export class World {
       if (T.noise.fbm(x * 0.05, z * 0.05, 2, 10) < 0.52) continue;
       const h = T.heightAt(x, z);
       if (h < 0.5 || h > 12 || T.slopeAt(x, z) > 25 || T.pathMask(x, z) > 0.3) continue;
-      const ci = clamp(Math.floor(T.noise.sample(x * 0.02, z * 0.02, 11) * 5), 0, 4);
-      const s = rng.range(0.8, 1.4);
-      q.setFromEuler(e.set(rng.range(-0.14, 0.14), rng() * 6.28, rng.range(-0.14, 0.14)));
-      batch.add(stem, m.compose(new THREE.Vector3(x, h - 0.02, z), q, new THREE.Vector3(s, s, s)), SW.stem);
-      batch.add(head, m.compose(new THREE.Vector3(x, h + 0.3 * s, z), q, new THREE.Vector3(s * 1.3, s * 0.6, s * 1.3)), SW.flowers[ci]);
+      // Wildflower patch: two crossed cards from the flower atlas (poppy, daisy, lavender, buttercup).
+      const ci = clamp(Math.floor(T.noise.sample(x * 0.02, z * 0.02, 11) * 4), 0, 3);
+      const sz = rng.range(0.42, 0.7), rot = rng() * Math.PI;
+      const tone = new THREE.Color().setScalar(rng.range(0.85, 1.1));
+      for (const a of [rot, rot + Math.PI / 2]) {
+        const dx = Math.cos(a) * sz / 2, dz = Math.sin(a) * sz / 2, y0 = h - 0.03, y1 = h + sz * 0.95;
+        flowers.quad(new THREE.Vector3(x - dx, y0, z - dz), new THREE.Vector3(x + dx, y0, z + dz), new THREE.Vector3(x + dx, y1, z + dz), new THREE.Vector3(x - dx, y1, z - dz),
+          UP, tone, 1, [ci / 4 + 0.004, 0, (ci + 1) / 4 - 0.004, 1]);
+      }
     }
     for (const t of this.treePositions) {
       if (rng() > 0.35) continue;
@@ -755,6 +759,19 @@ export class World {
     const mesh = new THREE.Mesh(batch.build(), new THREE.MeshLambertMaterial({ vertexColors: true }));
     mesh.receiveShadow = true;
     this.root.add(mesh);
+    const fmat = new THREE.MeshStandardMaterial({ map: flowerAtlas(), vertexColors: true, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.7 });
+    fmat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = this.grassUniforms.uTime;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float sway;\nuniform float uTime;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          float fw = sin(uTime * 1.5 + position.x * 0.3 + position.z * 0.2) * 0.06 * uv.y * sway;
+          transformed.x += fw; transformed.z += fw * 0.5;`);
+      shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n      normal = normalize(vNormal);');
+    };
+    const fmesh = new THREE.Mesh(flowers.build(), fmat);
+    fmesh.receiveShadow = true;
+    this.root.add(fmesh);
   }
 
   buildMotes() {
@@ -875,10 +892,11 @@ function nearCameraFade(shader, near = 1.4, far = 3.6) {
 
 class CardBatch {
   constructor() { this.pos = []; this.nor = []; this.uv = []; this.col = []; this.sway = []; this.idx = []; }
-  quad(a, b, c, d, n, col, sway) {
+  quad(a, b, c, d, n, col, sway, uvRect = null) {
     const s = this.pos.length / 3;
     for (const v of [a, b, c, d]) { this.pos.push(v.x, v.y, v.z); this.nor.push(n.x, n.y, n.z); this.col.push(col.r, col.g, col.b); this.sway.push(sway); }
-    this.uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+    const [u0, v0, u1, v1] = uvRect || [0, 0, 1, 1];
+    this.uv.push(u0, v0, u1, v0, u1, v1, u0, v1);
     this.idx.push(s, s + 1, s + 2, s, s + 2, s + 3);
   }
   /** Leaf cluster card at p, facing roughly along `out` (randomly rotated), size in metres. */
@@ -967,6 +985,57 @@ function leafTexture(size = 512) {
       leaf(sx, sy, len, wid, a, Math.round(170 + rng() * 70));
     }
     leaf(x0 + Math.cos(ang0) * L, y0 + Math.sin(ang0) * L, size * 0.12, size * 0.032, ang0, 220); // terminal leaf
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
+}
+
+/** Wildflower atlas, 4 cells: poppies, daisies, lavender, buttercups (stems + petals, alpha cut-out). */
+function flowerAtlas() {
+  const W = 1024, H = 256, cell = 256;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  const rng = makeRng(57);
+  const stem = (x0, y0, x1, y1) => {
+    ctx.strokeStyle = 'rgb(70,120,45)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo((x0 + x1) / 2 + (rng() - 0.5) * 20, (y0 + y1) / 2, x1, y1); ctx.stroke();
+    // a couple of narrow leaves on the stem
+    for (let k = 0; k < 2; k++) {
+      const t = 0.25 + k * 0.25, lx = x0 + (x1 - x0) * t, ly = y0 + (y1 - y0) * t, sd = k ? 1 : -1;
+      ctx.fillStyle = 'rgb(60,110,40)';
+      ctx.beginPath(); ctx.moveTo(lx, ly); ctx.quadraticCurveTo(lx + sd * 16, ly - 10, lx + sd * 30, ly - 26); ctx.quadraticCurveTo(lx + sd * 10, ly - 8, lx, ly); ctx.fill();
+    }
+  };
+  const petals = (x, y, n, len, wid, fill, rot = 0) => {
+    for (let i = 0; i < n; i++) {
+      const a = rot + i / n * Math.PI * 2;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+      ctx.fillStyle = fill;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(len * 0.5, -wid, len, 0); ctx.quadraticCurveTo(len * 0.5, wid, 0, 0); ctx.fill();
+      ctx.restore();
+    }
+  };
+  for (let ci = 0; ci < 4; ci++) {
+    const ox = ci * cell;
+    for (let f = 0; f < 5; f++) {
+      const bx = ox + 40 + rng() * 176, top = 40 + rng() * 90;
+      stem(bx + (rng() - 0.5) * 20, H, bx, top);
+      if (ci === 0) {        // poppy: four broad red petals, dark centre
+        petals(bx, top, 4, 26, 18, `rgb(${210 + rng() * 40 | 0},40,35)`, rng());
+        ctx.fillStyle = 'rgb(30,20,25)'; ctx.beginPath(); ctx.arc(bx, top, 6, 0, Math.PI * 2); ctx.fill();
+      } else if (ci === 1) { // daisy: many slim white petals, yellow centre
+        petals(bx, top, 14, 22, 5, 'rgb(250,250,244)', rng());
+        ctx.fillStyle = 'rgb(240,190,40)'; ctx.beginPath(); ctx.arc(bx, top, 7, 0, Math.PI * 2); ctx.fill();
+      } else if (ci === 2) { // lavender: spike of small purple buds
+        for (let k = 0; k < 12; k++) {
+          ctx.fillStyle = `rgb(${130 + rng() * 40 | 0},${90 + rng() * 30 | 0},${200 + rng() * 40 | 0})`;
+          ctx.beginPath(); ctx.ellipse(bx + (k % 2 ? 4 : -4), top + k * 7, 5, 6, 0, 0, Math.PI * 2); ctx.fill();
+        }
+      } else {               // buttercup: five glossy yellow cupped petals
+        petals(bx, top, 5, 17, 11, 'rgb(250,205,40)', rng());
+        ctx.fillStyle = 'rgb(255,235,120)'; ctx.beginPath(); ctx.arc(bx, top, 5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
   }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   return t;

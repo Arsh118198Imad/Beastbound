@@ -9,7 +9,7 @@ export const FrameCaps = [30, 60, 120, 0];
 export function defaultSettings() {
   return {
     mouseSensitivity: 2.2, invertY: false, fov: 60, master: 0.8, sfx: 0.9, music: 0.6,
-    quality: 1, dayLength: 24, showFps: false, showHint: true, frameCap: 3, artStyle: 0,
+    quality: 1, dayLength: 24, showFps: false, showHint: true, frameCap: 3, artStyle: 0, autoQuality: true,
   };
 }
 
@@ -68,6 +68,7 @@ function sanitize(s) {
   s.quality = Number.isInteger(s.quality) && s.quality >= 0 && s.quality < 4 ? s.quality : 1;
   s.frameCap = Number.isInteger(s.frameCap) && s.frameCap >= 0 && s.frameCap < FrameCaps.length ? s.frameCap : 3;
   s.artStyle = s.artStyle === 1 ? 1 : 0;
+  s.autoQuality = s.autoQuality !== false;
   s.invertY = !!s.invertY; s.showFps = !!s.showFps; s.showHint = s.showHint !== false;
   return s;
 }

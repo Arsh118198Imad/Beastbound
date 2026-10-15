@@ -6,6 +6,7 @@ import { buildCreatureParts, createAnimator } from './creatures.js';
 import { QualityNames, FrameCaps, defaultSettings, Saves } from './save.js';
 import { Navigation } from './hud/navigation.js';
 import { ArtStyles } from './render/style.js';
+import { clamp01 } from './util.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -17,6 +18,7 @@ export class UI {
     this.changedAt = -1;
     this.hintExpanded = false;
     this.markers = [];
+    this.abilityEls = {};
     this.nav = new Navigation(game, $('#compass'), $('#minimap'));
     this.damage = [];
     this.fps = { frames: 0, time: 0 };
@@ -217,6 +219,7 @@ export class UI {
     cycle('Graphics quality', 'quality', QualityNames);
     cycle('Frame cap', 'frameCap', FrameCaps.map((c) => (c ? `${c} FPS` : 'Unlimited (display rate)')));
     slider('Day length (minutes)', 'dayLength', 2, 120, 1, (v) => `${Math.round(v)}`);
+    toggle('Auto-lower quality if slow', 'autoQuality');
     toggle('Show FPS counter', 'showFps');
     toggle('Show controls hint', 'showHint');
   }
@@ -366,11 +369,29 @@ export class UI {
     $('i', hpBar).style.width = `${p.health.fraction * 100}%`;
     $('i', hpBar).style.background = p.health.fraction < 0.35 ? '#f2735e' : '';
     $('b', hpBar).textContent = `${Math.ceil(p.health.current)} / ${p.health.max}`;
-    $('#player-panel .spark i').style.width = `${p.sparkCd01 * 100}%`;
-    $('#player-panel .dodge i').style.width = `${p.dodgeCd01 * 100}%`;
+    // Ability bar: cooldown sweep (--cd = fraction still cooling), key prompts, active highlight.
+    const gt = g.time;
+    const abil = {
+      strike: { cd: p.attacking ? 1 - clamp01((gt - p.attackStart) / 0.42) : 0, key: 'Attack', active: p.attacking },
+      spark: { cd: 1 - p.sparkCd01, key: 'Spark' },
+      dodge: { cd: 1 - p.dodgeCd01, key: 'Dodge' },
+      bind: { cd: clamp01((p.bindReadyAt - gt) / 1.2), key: 'Bind', active: !!p.bindTarget },
+    };
+    for (const [k, a] of Object.entries(abil)) {
+      const el = this.abilityEls[k] || (this.abilityEls[k] = $(`#abilities [data-ab=${k}]`));
+      el.style.setProperty('--cd', a.cd.toFixed(3));
+      el.classList.toggle('ready', a.cd <= 0.001);
+      el.classList.toggle('active', !!a.active);
+      const kb = el.querySelector('kbd');
+      const label = input.prompt(a.key);
+      if (kb.textContent !== label) kb.textContent = label;
+    }
     $('#player-panel .status').textContent = p.sneaking ? 'Sneaking' : p.wading ? 'Wading' : p.running ? 'Running' : '';
     const partner = g.collection.partner;
-    $('#player-panel .partner').textContent = partner ? `Partner: ${partner.nickname || Species[partner.speciesId].name} · Lv ${partner.level} (${partner.personality})` : 'No partner yet';
+    $('#player-panel .partner .pn').textContent = partner ? `Partner: ${partner.nickname || Species[partner.speciesId].name} · Lv ${partner.level} (${partner.personality})` : 'No partner yet';
+    const comp = g.companion, php = $('#player-panel .php');
+    php.classList.toggle('hidden', !comp);
+    if (comp) $('i', php).style.width = `${comp.health.fraction * 100}%`;
     const v = p.health.fraction < 0.35 ? (0.35 - p.health.fraction) / 0.35 * (0.75 + 0.25 * Math.sin(g.time * 6)) : 0;
     $('#vignette').style.opacity = v * 0.55;
     this.nav.update();

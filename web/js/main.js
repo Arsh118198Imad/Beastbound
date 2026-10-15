@@ -11,7 +11,7 @@ import { AudioSystem } from './audio.js';
 import { Input } from './input.js';
 import { UI } from './ui.js';
 import { Events } from './events.js';
-import { Saves, FrameCaps } from './save.js';
+import { Saves, FrameCaps, QualityNames } from './save.js';
 import { createRecord, Species, Awareness } from './rules.js';
 import { PostFX } from './render/postfx.js';
 
@@ -347,6 +347,7 @@ class Game {
     const cap = FrameCaps[this.settings.frameCap];
     if (cap > 0 && now - this.lastRender < 1000 / cap - 1) return;
     this.lastRender = now;
+    this.watchPerformance(now);
     let realDt = Math.min(0.05, Math.max(0, (now - this.last) / 1000));
     this.last = now;
     this.frame++;
@@ -395,6 +396,26 @@ class Game {
     this.ui.updateHud(realDt);
     this.ui.renderPortrait(realDt);
     input.endFrame();
+  }
+
+  /** If play stays well below the target frame rate for 5 s, step graphics quality down once (can be disabled). */
+  watchPerformance(now) {
+    const p = this.perf || (this.perf = { start: now, frames: 0, slow: 0 });
+    if (this.state !== 'playing' || document.hidden) { p.start = now; p.frames = 0; return; }
+    p.frames++;
+    if (now - p.start < 1000) return;
+    const fps = p.frames * 1000 / (now - p.start);
+    const cap = FrameCaps[this.settings.frameCap];
+    const target = Math.min(cap > 0 ? cap : 60, 60) * 0.7;
+    p.slow = fps < target ? p.slow + 1 : Math.min(0, p.slow + 1);
+    p.start = now; p.frames = 0;
+    if (p.slow >= 5 && this.settings.autoQuality && this.settings.quality > 0) {
+      this.settings.quality--;
+      this.applySettings();
+      Saves.saveSettings(this.settings);
+      Events.notify(`Graphics lowered to ${QualityNames[this.settings.quality]} to keep things smooth (Settings → Graphics quality).`);
+      p.slow = -10; // give the new setting time to settle before judging again
+    }
   }
 
   /** Grass parts around the Warden (and stays bent along a short trail) and around nearby creatures. */

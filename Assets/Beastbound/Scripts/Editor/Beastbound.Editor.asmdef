@@ -2,7 +2,9 @@
     "name": "Beastbound.Editor",
     "rootNamespace": "Beastbound.EditorTools",
     "references": [
-        "Beastbound.Runtime"
+        "Beastbound.Runtime",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
     ],
     "includePlatforms": [
         "Editor"
@@ -13,6 +15,12 @@
     "precompiledReferences": [],
     "autoReferenced": false,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "14.0.0",
+            "define": "BB_URP"
+        }
+    ],
     "noEngineReferences": false
 }

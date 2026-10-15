@@ -35,6 +35,11 @@ namespace Beastbound.Creatures
                 var pebbloom = DefaultContent.CreatePebbloom();
                 _byId[pebbloom.speciesId] = pebbloom;
             }
+            if (!_byId.ContainsKey(DefaultContent.ThalorixId))
+            {
+                var thalorix = DefaultContent.CreateThalorix();
+                _byId[thalorix.speciesId] = thalorix;
+            }
         }
 
         public CreatureSpecies Get(string speciesId)
@@ -48,6 +53,7 @@ namespace Beastbound.Creatures
     public static class DefaultContent
     {
         public const string PebbloomId = "pebbloom";
+        public const string ThalorixId = "thalorix";
 
         public static AttackDefinition CreatePebbleToss()
         {
@@ -130,6 +136,100 @@ namespace Beastbound.Creatures
             s.fieldOfView = 150f;
             s.hearingRadius = 8f;
             s.closeRadius = 2.4f;
+            return s;
+        }
+
+        public static AttackDefinition CreateThornfangLunge()
+        {
+            var a = ScriptableObject.CreateInstance<AttackDefinition>();
+            a.name = "Attack_ThornfangLunge";
+            a.attackId = "thornfang_lunge";
+            a.displayName = "Thornfang Lunge";
+            a.description = "Lowers its horns, the crystals flare, then it springs. Watch for the crouch and dodge sideways.";
+            a.kind = AttackKind.Charge;
+            a.element = Element.Verdant;
+            a.power = 17f;
+            a.range = 9f;
+            a.cooldown = 4.6f;
+            a.windup = 0.85f;
+            a.projectileSpeed = 12.5f; // dash speed for charges
+            a.knockback = 7f;
+            a.hitRadius = 1.4f;
+            return a;
+        }
+
+        public static AttackDefinition CreateVeinlightBolt()
+        {
+            var a = ScriptableObject.CreateInstance<AttackDefinition>();
+            a.name = "Attack_VeinlightBolt";
+            a.attackId = "veinlight_bolt";
+            a.displayName = "Veinlight Bolt";
+            a.description = "Gathers the blue light from its veins into a bolt and looses it from its horns.";
+            a.kind = AttackKind.Projectile;
+            a.element = Element.Verdant;
+            a.power = 11f;
+            a.range = 15f;
+            a.cooldown = 2.9f;
+            a.windup = 0.6f;
+            a.projectileSpeed = 17f;
+            a.knockback = 3f;
+            a.hitRadius = 0.6f;
+            a.projectileColor = new Color(0.35f, 0.78f, 1f);
+            a.projectileGlow = new Color(0.45f, 1.1f, 1.5f);
+            a.projectileSize = 0.3f;
+            a.projectileGravity = -1.5f;
+            return a;
+        }
+
+        public static AttackDefinition CreateGuardianSwipe()
+        {
+            var a = ScriptableObject.CreateInstance<AttackDefinition>();
+            a.name = "Attack_GuardianSwipe";
+            a.attackId = "guardian_swipe";
+            a.displayName = "Guardian Swipe";
+            a.description = "A heavy forepaw swipe that clears the space in front of it.";
+            a.kind = AttackKind.Melee;
+            a.element = Element.Verdant;
+            a.power = 12f;
+            a.range = 2.9f;
+            a.cooldown = 1.9f;
+            a.windup = 0.45f;
+            a.knockback = 4.5f;
+            a.hitRadius = 1.7f;
+            return a;
+        }
+
+        public static CreatureSpecies CreateThalorix()
+        {
+            var s = ScriptableObject.CreateInstance<CreatureSpecies>();
+            s.name = "Species_Thalorix";
+            s.speciesId = ThalorixId;
+            s.displayName = "Thalorix";
+            s.element = Element.Verdant;
+            s.model = CreatureModelKind.Thalorix;
+            s.description = "A maned forest guardian, part wolf and part lion. Blue light runs through the veins of its " +
+                            "legs and face, and its swept-back horns end in living crystal that brightens when it is " +
+                            "about to strike.";
+            s.habitat = "Deep, quiet woodland at the western edge of Sunmeadow Vale.";
+            s.lore = "Old wardens say a Thalorix chooses whom it follows. It will not be rushed — only patience, " +
+                     "or a fair fight, earns its trust.";
+            s.palette = new CreaturePalette
+            {
+                body = new Color(0.3f, 0.33f, 0.36f), bodyDark = new Color(0.16f, 0.18f, 0.2f),
+                belly = new Color(0.55f, 0.55f, 0.52f), moss = new Color(0.2f, 0.3f, 0.28f),
+                petal = new Color(0.25f, 0.6f, 0.85f), petalCenter = new Color(0.5f, 0.85f, 1f),
+                crystal = new Color(0.45f, 0.85f, 1f), crystalGlow = new Color(0.3f, 0.9f, 1.4f)
+            };
+            s.modelScale = 2f; // collider, aim point and marker height (the visual model has its own scale)
+            s.baseStats = new StatBlock(92f, 15f, 15f, 12f);
+            s.baseCaptureRate = 0.16f;
+            s.attacks = new[] { CreateThornfangLunge(), CreateVeinlightBolt(), CreateGuardianSwipe() };
+            s.walkSpeed = 2.3f;
+            s.runSpeed = 7.2f;
+            s.sightRadius = 20f;
+            s.fieldOfView = 160f;
+            s.hearingRadius = 10f;
+            s.closeRadius = 3.2f;
             return s;
         }
     }

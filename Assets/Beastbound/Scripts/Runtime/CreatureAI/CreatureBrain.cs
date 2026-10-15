@@ -557,12 +557,15 @@ namespace Beastbound.CreatureAI
                     Vector3 aim = targetPos + Vector3.up * 0.9f;
                     float speed = Mathf.Max(5f, attack.projectileSpeed);
                     float flightTime = Vector3.Distance(origin, aim) / speed;
-                    const float g = -9f;
+                    float g = attack.projectileGravity;
                     // Ballistic velocity that lands on the aim point after flightTime.
                     Vector3 velocity = (aim - origin) / flightTime - 0.5f * g * flightTime * Vector3.up;
-                    var mat = MaterialFactory.Lit("PebbleProjectile", new Color(0.6f, 0.62f, 0.5f), 0.3f);
-                    Projectile.Spawn("Pebble", origin, velocity, faction, gameObject, attack.power, _c.Stats.attack,
-                        attack.element, attack.hitRadius, attack.knockback, mat, 0.28f, g, 4f);
+                    bool glows = attack.projectileGlow.maxColorComponent > 0.001f;
+                    var mat = glows
+                        ? MaterialFactory.Emissive("Projectile_" + attack.attackId, attack.projectileColor, attack.projectileGlow, 0.8f)
+                        : MaterialFactory.Lit("Projectile_" + attack.attackId, attack.projectileColor, 0.3f);
+                    Projectile.Spawn(attack.displayName, origin, velocity, faction, gameObject, attack.power, _c.Stats.attack,
+                        attack.element, attack.hitRadius, attack.knockback, mat, attack.projectileSize, g, 4f);
                     _c.Animator?.PlayLunge();
                     AudioManager.PlaySfx(SfxId.PebbleThrow, origin, 0.8f);
                     break;

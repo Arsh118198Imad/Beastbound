@@ -33,6 +33,9 @@ namespace Beastbound.Creatures
         private Quaternion _earLBase, _earRBase, _tailBase;
         private Vector3[] _eyeBaseScale;
         private float _glowBoost;
+        private QuadrupedRig _rig;
+        private float _lastYaw;
+        private float _turnRate;
 
         /// <summary>Current planar speed in m/s (set by the motor).</summary>
         public float Speed { get; set; }
@@ -54,18 +57,40 @@ namespace Beastbound.Creatures
             _phase = Random.value * 10f;
         }
 
-        public void PlayHurt() => _hurtTimer = 0.25f;
-        public void PlayLunge() => _lungeTimer = 0.3f;
-        public void PlayHappy() => _happyTimer = 0.8f;
+        /// <summary>Uses a skinned Blender model (bones driven by <see cref="QuadrupedRig"/>) instead of primitives.</summary>
+        public void InitializeSkinned(QuadrupedRig rig)
+        {
+            _rig = rig;
+            _lastYaw = transform.localEulerAngles.y;
+        }
+
+        public bool IsSkinned => _rig != null;
+
+        /// <summary>Animate while the game is paused (Bestiary portrait).</summary>
+        public bool UseUnscaledTime { get; set; }
+
+        public void PlayHurt() { _hurtTimer = 0.25f; _rig?.PlayHurt(); }
+        public void PlayLunge() { _lungeTimer = 0.3f; _rig?.PlayLunge(); }
+        public void PlayHappy() { _happyTimer = 0.8f; _rig?.PlayHappy(); }
 
         /// <summary>Brightens the brow crystal briefly (binding, happiness).</summary>
-        public void Glow(float amount) => _glowBoost = Mathf.Max(_glowBoost, amount);
+        public void Glow(float amount) { _glowBoost = Mathf.Max(_glowBoost, amount); _rig?.Glow(amount); }
 
         private void LateUpdate()
         {
+            float dt = UseUnscaledTime ? Time.unscaledDeltaTime : Time.deltaTime;
+            float t = UseUnscaledTime ? Time.unscaledTime : Time.time;
+            if (_rig != null)
+            {
+                // Turn rate for the spine bend: web convention, rad/s with positive = turning left.
+                float yaw = transform.localEulerAngles.y;
+                float yawRate = dt > 0f ? Mathf.DeltaAngle(_lastYaw, yaw) / dt : 0f;
+                _lastYaw = yaw;
+                _turnRate = Mathf.Lerp(_turnRate, -yawRate * Mathf.Deg2Rad, QuadrupedRig.Damp(10f, dt));
+                if (dt > 0f) _rig.Update(dt, t, Speed, MaxSpeed, _turnRate, Pose);
+                return;
+            }
             if (_parts == null || _parts.Root == null) return;
-            float dt = Time.deltaTime;
-            float t = Time.time;
 
             _speedSmoothed = Mathf.Lerp(_speedSmoothed, Speed, 1f - Mathf.Exp(-10f * dt));
             float moveAmount = Mathf.Clamp01(_speedSmoothed / Mathf.Max(0.1f, MaxSpeed));

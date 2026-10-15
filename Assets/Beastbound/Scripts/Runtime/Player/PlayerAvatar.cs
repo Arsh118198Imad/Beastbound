@@ -28,12 +28,14 @@ namespace Beastbound.Player
         private float _verticalVelocity;
         private float _defeatBlend;
         private Combat.Health _health;
+        private WardenRig _rig;
 
         private const float StrikeTime = 0.42f;
         private const float DodgeTime = 0.3f;
 
         public void Build()
         {
+            if (BuildSkinned()) return;
             var tunic = MaterialFactory.Lit("Warden_Tunic", new Color(0.16f, 0.5f, 0.52f), 0.2f);
             var tunicDark = MaterialFactory.Lit("Warden_TunicDark", new Color(0.12f, 0.36f, 0.4f), 0.2f);
             var skin = MaterialFactory.Lit("Warden_Skin", new Color(0.93f, 0.76f, 0.62f), 0.3f);
@@ -100,6 +102,28 @@ namespace Beastbound.Player
             Layers.SetLayerRecursively(_root.gameObject, gameObject.layer);
         }
 
+        /// <summary>Uses the Blender-made Warden when it has been imported (see ModelLibrary).</summary>
+        private bool BuildSkinned()
+        {
+            _root = Pivot(transform, "Avatar", Vector3.zero);
+            var model = ModelLibrary.Instantiate("warden", _root, gameObject.layer);
+            if (model == null)
+            {
+                Destroy(_root.gameObject);
+                _root = null;
+                return false;
+            }
+            // Staff crystal tip in the model's rest pose (art/blender/warden.py: staff top + crystal), parented to
+            // the right hand so it follows every swing.
+            var hand = model.Bone("handR");
+            var tip = new GameObject("StaffTip").transform;
+            tip.SetParent(hand != null ? hand : model.Root, false);
+            tip.position = model.Root.TransformPoint(new Vector3(0.29f, 1.86f, 0.05f));
+            _staffTip = tip;
+            _rig = new WardenRig(_root, model);
+            return true;
+        }
+
         private static Transform Pivot(Transform parent, string name, Vector3 localPos)
         {
             var t = new GameObject(name).transform;
@@ -111,18 +135,36 @@ namespace Beastbound.Player
 
         // ------------------------------------------------------------------ Triggers
 
-        public void PlayStrike(int comboIndex) { _strikeTimer = StrikeTime; _strikeIndex = comboIndex; }
-        public void PlayCast() => _castTimer = 0.35f;
-        public void PlayThrow() => _throwTimer = 0.4f;
-        public void PlayDodge() => _dodgeTimer = DodgeTime;
-        public void PlayHurt() => _hurtTimer = 0.25f;
-        public void PlayLand() => _landTimer = 0.15f;
+        public void PlayStrike(int comboIndex)
+        {
+            _strikeTimer = StrikeTime; _strikeIndex = comboIndex;
+            if (_rig != null) { _rig.Strike = StrikeTime; _rig.StrikeIndex = comboIndex; }
+        }
+        public void PlayCast() { _castTimer = 0.35f; if (_rig != null) _rig.Cast = 0.35f; }
+        public void PlayThrow() { _throwTimer = 0.4f; if (_rig != null) _rig.Throw = 0.4f; }
+        public void PlayDodge() { _dodgeTimer = DodgeTime; if (_rig != null) _rig.Dodge = DodgeTime; }
+        public void PlayHurt() { _hurtTimer = 0.25f; if (_rig != null) _rig.Hurt = 0.25f; }
+        public void PlayLand() { _landTimer = 0.15f; if (_rig != null) _rig.Land = 0.15f; }
         public void PlayJump() => _jumpTimer = 0.2f;
 
         public void ResetPose()
         {
             _strikeTimer = _castTimer = _throwTimer = _dodgeTimer = _hurtTimer = _landTimer = _jumpTimer = 0f;
             _defeatBlend = 0f;
+            _rig?.Reset();
+        }
+
+        /// <summary>Called by PlayerController every frame with the full movement state.</summary>
+        public void Tick(AvatarState state)
+        {
+            if (_rig != null)
+            {
+                if (_health == null) _health = GetComponent<Combat.Health>();
+                state.Dead = _health != null && _health.IsDead;
+                if (Time.deltaTime > 0f) _rig.Update(Time.deltaTime, Time.time, state);
+                return;
+            }
+            Tick(state.Speed, state.RunSpeed, state.Grounded, state.Sneaking, state.Wading, state.VerticalVelocity);
         }
 
         // ------------------------------------------------------------------ Animation

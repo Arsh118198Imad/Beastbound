@@ -61,6 +61,7 @@ namespace Beastbound.Core
             Time.timeScale = 1f;
             var sun = FindOrCreateSun();
             var cam = FindOrCreateCamera();
+            PostFxRig.Setup(cam, transform); // URP only (Beastbound > Setup)
 
             var saves = new SaveSystem();
             var settings = saves.LoadSettings();

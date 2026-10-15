@@ -78,11 +78,7 @@ namespace Beastbound.Creatures
             creature.Health.Configure(role == CreatureRole.Wild ? Faction.Wild : Faction.Companion,
                 creature.Stats.maxHealth, creature.Stats.defense, species.element);
 
-            var parts = BuildModel(species, go.transform, record);
-            creature.Animator = go.AddComponent<CreatureAnimator>();
-            creature.Animator.BaseScale = scale;
-            creature.Animator.MaxSpeed = species.runSpeed;
-            creature.Animator.Initialize(parts, species.palette.crystalGlow);
+            creature.Animator = CreatureVisuals.Attach(go, species, record.uid);
 
             creature.Motor = go.AddComponent<CreatureMotor>();
             creature.Perception = go.AddComponent<CreaturePerception>();
@@ -91,17 +87,6 @@ namespace Beastbound.Creatures
             creature.Perception.Initialize(creature);
             creature.Brain.Initialize(creature);
             return creature;
-        }
-
-        private static CreatureModelParts BuildModel(CreatureSpecies species, Transform root, CreatureRecord record)
-        {
-            int variantSeed = string.IsNullOrEmpty(record.uid) ? 0 : record.uid.GetHashCode() & 0x7;
-            switch (species.model)
-            {
-                case CreatureModelKind.Pebbloom:
-                default:
-                    return PebbloomModel.Build(root, species.palette, species.modelScale, variantSeed);
-            }
         }
 
         /// <summary>Capture awareness used by the binding formula.</summary>

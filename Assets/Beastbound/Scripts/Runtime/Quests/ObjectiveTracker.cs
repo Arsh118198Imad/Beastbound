@@ -8,7 +8,7 @@ namespace Beastbound.Quests
 {
     /// <summary>
     /// The prototype's guided objective chain, so a new player always knows what to do next:
-    ///   0. Find a wild Pebbloom   1. Bind one   2. Open the Bestiary   3. Bind the rest   4. Done
+    ///   0. Find a wild creature   1. Bind one   2. Open the Bestiary   3. Bind the rest   4. Done
     /// Text adapts to keyboard or gamepad prompts.
     /// </summary>
     public class ObjectiveTracker : MonoBehaviour
@@ -61,7 +61,7 @@ namespace Beastbound.Quests
                 if ((c.transform.position - gm.Player.transform.position).sqrMagnitude < 14f * 14f)
                 {
                     Advance(StepBind);
-                    GameEvents.Notify("A wild Pebbloom! Sneak closer, or weaken it, then bind it.", NotificationKind.Discovery);
+                    GameEvents.Notify($"A wild {c.Species.displayName}! Sneak closer, or weaken it, then bind it.", NotificationKind.Discovery);
                     AudioPing();
                     return;
                 }
@@ -70,8 +70,16 @@ namespace Beastbound.Quests
 
         private static void AudioPing() => Audio.AudioManager.PlayUi(Audio.SfxId.Discovery, 0.6f);
 
+        private bool _guardianSeen;
+
         private void OnSpotted(string speciesId)
         {
+            if (speciesId == Creatures.DefaultContent.ThalorixId && !_guardianSeen)
+            {
+                _guardianSeen = true;
+                GameEvents.Notify("A Thalorix, guardian of the western woods. It is strong and hard to bind — weaken it first.",
+                    NotificationKind.Discovery);
+            }
             if (Step == StepFind) Advance(StepBind);
         }
 
@@ -98,7 +106,7 @@ namespace Beastbound.Quests
                 Step = step;
                 if (Step == StepComplete)
                 {
-                    GameEvents.Notify("Every Pebbloom in Sunmeadow Vale is bound. Prototype complete — thank you for playing!", NotificationKind.Discovery);
+                    GameEvents.Notify("Every creature in Sunmeadow Vale is bound. Prototype complete — thank you for playing!", NotificationKind.Discovery);
                 }
             }
             Changed?.Invoke();
@@ -130,7 +138,7 @@ namespace Beastbound.Quests
                 switch (Step)
                 {
                     case StepFind: return "Explore Sunmeadow Vale";
-                    case StepBind: return "Bind a Pebbloom";
+                    case StepBind: return "Bind a wild creature";
                     case StepBestiary: return "Meet your partner";
                     case StepBindAll: return "Befriend the vale";
                     default: return "Sunmeadow Vale complete";
@@ -146,7 +154,7 @@ namespace Beastbound.Quests
                 switch (Step)
                 {
                     case StepFind:
-                        return "Wild Pebblooms live around the meadow, the lake and the old ruins. Find one.";
+                        return "Wild creatures live around the meadow, the lake, the old ruins and the western woods. Find one.";
                     case StepBind:
                         return $"Sneak [{GameInput.Prompt("Sneak")}] to stay unnoticed, or weaken it with " +
                                $"[{GameInput.Prompt("Attack")}] / [{GameInput.Prompt("Spark")}]. Then press " +
@@ -157,7 +165,7 @@ namespace Beastbound.Quests
                     {
                         int total = gm != null && gm.World != null ? gm.World.Nests.Count : 0;
                         int bound = total - RemainingWild();
-                        return $"Bind every Pebbloom in the vale ({bound}/{total}). Each has its own personality.";
+                        return $"Bind every creature in the vale ({bound}/{total}). Each has its own personality.";
                     }
                     default:
                         return "You can keep exploring. More regions and creatures arrive in future milestones.";

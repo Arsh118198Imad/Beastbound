@@ -66,6 +66,22 @@ Before you start: *Window → General → Console*, and enable **Error Pause** s
 - [ ] Settings persist after restarting play mode.
 - [ ] Beastbound → Open Save Folder shows `journey.json` and `settings.json` and nothing else.
 
+## K. Graphics upgrade (URP, Blender models)
+- [ ] *Beastbound → Setup → 1. Install Packages* → Install: Package Manager installs **Universal RP**, **Input System** and **glTFast** with no red errors. (Accept the Input System restart if asked.)
+- [ ] After the recompile, the **"Beastbound graphics ready"** dialog appears by itself (or *Setup → 2. Configure Graphics (URP)* shows it).
+- [ ] *Edit → Project Settings → Graphics*: Default Render Pipeline is `BeastboundURP`. *Player → Other Settings → Color Space* is **Linear**.
+- [ ] `Assets/Beastbound/Resources/Models/` shows the four `.glb` files as model assets (with a preview), not blank file icons.
+- [ ] Nothing is **pink/magenta** in the Game view. (If the models are pink: *Beastbound → Setup → 3. Re-import Models*.)
+- [ ] Press Play: the Warden is the Blender model (wide hat, coat, scarf, staff with a glowing crystal), not the capsule figure.
+- [ ] Walk, run (Shift), sneak (Ctrl): feet plant without sliding, the body leans into turns and when speeding up; reversing at a run plants and pivots.
+- [ ] Strike combo, Ember Spark and dodge roll animate the staff arm and the whole body; the Spark comes out of the staff crystal.
+- [ ] Wild Pebblooms are the Blender model (mossy stone plates, petal ears, tail flower), hop when they move, close their eyes and tail flower when asleep.
+- [ ] The **Thalorix** lives in a clearing in the western woods (west of the Waystone): mane, horns with glowing crystals, blue veins. It walks/trots without leg sliding, crouches before its lunge, and fires a glowing blue bolt.
+- [ ] Bestiary portrait shows the Blender model idling (the Thalorix fits in the frame).
+- [ ] Bloom on the Waystone crystal, horn crystals and staff tip; soft shadows; no flickering or jagged shadow edges near the player.
+- [ ] Boulders, standing stones and ruin blocks are the chipped Blender stones (no plain grey cubes).
+- [ ] Settings → Graphics quality Low → Ultra visibly changes shadow distance; note the FPS on Medium and High.
+
 ## I. Performance (Stats window: Game view → Stats)
 - [ ] Note FPS and batches on High in the meadow and looking across the lake.
 - [ ] Low quality is noticeably faster if your PC struggles.

@@ -9,7 +9,7 @@ Player controller, camera, generated vale, Pebbloom, stealth AI, binding, battle
 
 ## Milestone 2 – Make it feel great
 - Switch to **URP** (Universal 3D), add post-processing (bloom on crystals, colour grading, ambient occlusion), Shader Graph water and wind-swept grass.
-- Replace procedural player/creature models with rigged, animated models (original or properly licensed – e.g. made in Blender). Animator controllers for locomotion, attacks and reactions. *Web edition: done for the Warden, Pebbloom and Thalorix via `art/blender/` scripts (procedural animation); Unity import still to do.*
+- Replace procedural player/creature models with rigged, animated models (original or properly licensed – e.g. made in Blender). Animator controllers for locomotion, attacks and reactions. *Done for the Warden, Pebbloom and Thalorix via `art/blender/` scripts (procedural animation), in both editions: Unity imports the same `.glb` files with glTFast (Beastbound → Setup). Unity URP + post-processing set up by script; needs a first test in the Editor.*
 - Shader-variant collection so glowing materials keep their emission in builds.
 - Better VFX: particle hits, bind ring, dust, splashes.
 - Replace synthesised SFX/music with original recordings/compositions.

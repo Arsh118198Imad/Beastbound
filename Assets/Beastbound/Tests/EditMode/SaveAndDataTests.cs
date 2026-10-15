@@ -102,6 +102,17 @@ namespace Beastbound.Tests
         }
 
         [Test]
+        public void DefaultThalorix_IsValid_AndInCatalog()
+        {
+            var species = DefaultContent.CreateThalorix();
+            Assert.IsTrue(species.IsValid(out var problem), problem);
+            Assert.AreEqual(CreatureModelKind.Thalorix, species.model);
+            Assert.AreEqual(3, species.attacks.Length);
+            Object.DestroyImmediate(species);
+            Assert.IsNotNull(new CreatureCatalog(null).Get(DefaultContent.ThalorixId));
+        }
+
+        [Test]
         public void Record_ClampsInputs_AndClonesIndependently()
         {
             var r = CreatureRecord.Create("pebbloom", 999, Personality.Bold, 7f, "nest");

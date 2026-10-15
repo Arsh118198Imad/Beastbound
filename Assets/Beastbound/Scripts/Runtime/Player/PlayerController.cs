@@ -19,10 +19,14 @@ namespace Beastbound.Player
         public float sneakSpeed = 2.1f;
         public float wadeMultiplier = 0.55f;
 
-        [Header("Feel")]
-        public float acceleration = 30f;
-        public float deceleration = 26f;
-        [Range(0f, 1f)] public float airControl = 0.45f;
+        [Header("Feel (momentum: speed and heading change at human-like rates)")]
+        [Tooltip("m/s² when speeding up at walking pace.")] public float walkAcceleration = 14f;
+        [Tooltip("m/s² when speeding up into a run.")] public float runAcceleration = 11f;
+        [Tooltip("m/s² when slowing down.")] public float braking = 20f;
+        [Tooltip("m/s² when reversing at speed (plant and pivot).")] public float pivotBraking = 34f;
+        [Range(0f, 1f)] public float airControl = 0.3f;
+        [Tooltip("Heading turn rate (°/s) when slow; it falls to slowTurnRate at a sprint.")] public float fastTurnRate = 900f;
+        public float slowTurnRate = 360f;
         public float turnSpeed = 720f;
         public float jumpHeight = 1.25f;
         public float gravity = -24f;
@@ -39,6 +43,10 @@ namespace Beastbound.Player
         private bool _wasGrounded = true;
         private float _forcedUntil;
         private Vector3 _forcedVelocity;
+        private float _moveSpeed;     // smoothed locomotion speed
+        private float _moveHeading;   // smoothed locomotion heading (degrees, like transform yaw)
+        private float _turnRate;      // rad/s, positive = turning left (animation convention)
+        private float _accelFwd;      // m/s²
 
         public Health Health { get; private set; }
         public PlayerCombat Combat { get; private set; }
@@ -92,6 +100,7 @@ namespace Beastbound.Player
         private void Awake()
         {
             _cc = GetComponent<CharacterController>();
+            _moveHeading = transform.eulerAngles.y;
         }
 
         private void OnDestroy()
@@ -125,6 +134,10 @@ namespace Beastbound.Player
             _verticalVelocity = 0f;
             _knockback = Vector3.zero;
             _forcedUntil = 0f;
+            _moveSpeed = 0f;
+            _moveHeading = rotation.eulerAngles.y;
+            _turnRate = 0f;
+            _accelFwd = 0f;
         }
 
         public void Respawn(Vector3 position, Quaternion rotation)
@@ -195,11 +208,24 @@ namespace Beastbound.Player
             _verticalVelocity += g * dt;
             _verticalVelocity = Mathf.Max(_verticalVelocity, -40f);
 
-            // Horizontal velocity
-            Vector3 targetVel = moveDir * speed;
-            float control = IsGrounded ? 1f : airControl;
-            float rate = (targetVel.sqrMagnitude > _planarVelocity.sqrMagnitude ? acceleration : deceleration) * control;
-            _planarVelocity = Vector3.MoveTowards(_planarVelocity, targetVel, rate * dt);
+            // Horizontal velocity with momentum: speed up gently, brake firmly, turn tighter when slow.
+            float prevSpeed = _moveSpeed;
+            float inputMag = Mathf.Min(1f, moveDir.magnitude);
+            float desired = inputMag * speed;
+            float accel = desired > _moveSpeed ? (IsRunning ? runAcceleration : walkAcceleration) : braking;
+            if (!IsGrounded) accel *= airControl;
+            if (inputMag > 0.05f)
+            {
+                float want = Mathf.Atan2(moveDir.x, moveDir.z) * Mathf.Rad2Deg;
+                float d = Mathf.DeltaAngle(_moveHeading, want);
+                float turnDeg = IsGrounded ? Mathf.Lerp(fastTurnRate, slowTurnRate, Mathf.Clamp01((_moveSpeed - 2f) / 5f)) : 220f;
+                if (Mathf.Abs(d) > 132f && _moveSpeed > 4.5f) accel = pivotBraking; // plant and pivot on a reversal
+                _moveHeading += Mathf.Clamp(d, -turnDeg * dt, turnDeg * dt);
+            }
+            _moveSpeed += Mathf.Clamp(desired - _moveSpeed, -accel * dt, accel * dt);
+            float headingRad = _moveHeading * Mathf.Deg2Rad;
+            _planarVelocity = new Vector3(Mathf.Sin(headingRad), 0f, Mathf.Cos(headingRad)) * _moveSpeed;
+            _accelFwd = Mathf.Lerp(_accelFwd, (_moveSpeed - prevSpeed) / dt, 1f - Mathf.Exp(-6f * dt));
 
             Vector3 horizontal = _planarVelocity;
             if (Time.time < _forcedUntil) horizontal = _forcedVelocity;
@@ -223,17 +249,21 @@ namespace Beastbound.Player
                 Teleport(world.PlayerSpawn, world.PlayerSpawnRotation);
             }
 
-            // Rotation
+            // Body facing follows the movement heading (so turns arc naturally) unless a target or dodge overrides it.
+            float prevYaw = transform.eulerAngles.y;
             Vector3 face = Vector3.zero;
             if (FacingTarget.HasValue) face = FacingTarget.Value - transform.position;
             else if (Time.time < _forcedUntil) face = _forcedVelocity;
-            else if (moveDir.sqrMagnitude > 0.01f) face = moveDir;
+            else if (_moveSpeed > 0.15f) face = new Vector3(Mathf.Sin(headingRad), 0f, Mathf.Cos(headingRad));
             face.y = 0f;
             if (face.sqrMagnitude > 0.0001f)
             {
-                var targetRot = Quaternion.LookRotation(face.normalized, Vector3.up);
-                transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, turnSpeed * dt);
+                float targetYaw = Mathf.Atan2(face.x, face.z) * Mathf.Rad2Deg;
+                float step = Mathf.Clamp(Mathf.DeltaAngle(prevYaw, targetYaw) * Mathf.Min(1f, dt * 14f), -turnSpeed * dt, turnSpeed * dt);
+                transform.rotation = Quaternion.Euler(0f, prevYaw + step, 0f);
             }
+            float yawDelta = Mathf.DeltaAngle(prevYaw, transform.eulerAngles.y) * Mathf.Deg2Rad;
+            _turnRate = Mathf.Lerp(_turnRate, -yawDelta / dt, 1f - Mathf.Exp(-8f * dt));
 
             // Stats used by AI, camera and animation
             Vector3 planar = _cc.velocity;
@@ -257,7 +287,11 @@ namespace Beastbound.Player
                 }
             }
 
-            Avatar?.Tick(PlanarSpeed, runSpeed, IsGrounded, IsSneaking, IsWading, _verticalVelocity);
+            Avatar?.Tick(new AvatarState
+            {
+                Speed = PlanarSpeed, RunSpeed = runSpeed, Grounded = IsGrounded, Sneaking = IsSneaking, Wading = IsWading,
+                Running = IsRunning, VerticalVelocity = _verticalVelocity, Accel = _accelFwd, Turn = _turnRate
+            });
         }
     }
 }

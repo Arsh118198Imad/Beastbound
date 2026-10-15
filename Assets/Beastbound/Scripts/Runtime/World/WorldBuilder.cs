@@ -35,6 +35,12 @@ namespace Beastbound.World
         private Mesh[] _canopies, _rocks;
         private Mesh _sphere;
 
+        // Blender stone kit (art/blender/rocks.py → env.glb), used when imported. Vertex-coloured.
+        private static Mesh[] _kitRocks;
+        private static Mesh[] _kitBlocks;
+        private static Material _kitMaterial;
+        private Transform _rockRoot;
+
         private class Chunk
         {
             public readonly MeshBatch Props = new MeshBatch();     // trees and rocks (cast shadows)
@@ -110,6 +116,24 @@ namespace Beastbound.World
             for (int i = 0; i < _canopies.Length; i++) _canopies[i] = MeshKit.Rock(_seed + 100 + i, 0.16f, 1);
             _rocks = new Mesh[6];
             for (int i = 0; i < _rocks.Length; i++) _rocks[i] = MeshKit.Rock(_seed + 200 + i, 0.3f, 1);
+            LoadStoneKit();
+        }
+
+        private static void LoadStoneKit()
+        {
+            _kitRocks = null;
+            _kitBlocks = null;
+            _kitMaterial = ModelLibrary.SharedMaterial("env", "rock0");
+            if (_kitMaterial == null) return;
+            var rocks = new Mesh[6];
+            for (int i = 0; i < rocks.Length; i++)
+            {
+                rocks[i] = ModelLibrary.Mesh("env", "rock" + i);
+                if (rocks[i] == null) return;
+            }
+            var blocks = new[] { ModelLibrary.Mesh("env", "block0"), ModelLibrary.Mesh("env", "block1") };
+            _kitRocks = rocks;
+            if (blocks[0] != null && blocks[1] != null) _kitBlocks = blocks;
         }
 
         // ------------------------------------------------------------------ Terrain, water, panorama
@@ -252,7 +276,10 @@ namespace Beastbound.World
             MeshKit.AddPart(parent, "RuneC", crystalMesh, rune, new Vector3(5f, 0.3f, 8f), Vector3.one * 0.8f, Quaternion.Euler(-12f, 0f, -20f));
         }
 
-        /// <summary>Cube with a BoxCollider, positioned relative to <paramref name="parent"/>.</summary>
+        /// <summary>
+        /// Cube with a BoxCollider, positioned relative to <paramref name="parent"/>. Uses a chipped Blender
+        /// cut-stone block (1 m, centred like the cube) when the stone kit has been imported.
+        /// </summary>
         private static GameObject CreateSolidBlock(Transform parent, string name, Material mat, Vector3 localPos, Vector3 scale, Quaternion localRot)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -262,6 +289,13 @@ namespace Beastbound.World
             go.transform.localRotation = localRot;
             go.transform.localScale = scale;
             go.GetComponent<MeshRenderer>().sharedMaterial = mat;
+            if (_kitBlocks != null)
+            {
+                // Broken tops only on short blocks; tall pillars and lintels stay intact.
+                int pick = scale.y < 2f && (name.GetHashCode() & 3) == 0 ? 1 : 0;
+                go.GetComponent<MeshFilter>().sharedMesh = _kitBlocks[pick];
+                go.GetComponent<MeshRenderer>().sharedMaterial = _kitMaterial;
+            }
             go.isStatic = true;
             return go;
         }
@@ -299,6 +333,7 @@ namespace Beastbound.World
                 if (NearLandmark(x, z, 13f, 11f)) continue;
                 if (_terrain.PathMask(x, z) > 0.1f) continue;
                 if (Vector2.Distance(new Vector2(x, z), ValeLayout.PlayerSpawn) < 9f) continue;
+                if (Vector2.Distance(new Vector2(x, z), GuardianNest) < 8f) continue; // the guardian's clearing
                 float forest = _terrain.ForestMask(x, z);
                 float chance = 0.035f + forest * 0.9f + Noise.SmoothStep(80f, 110f, new Vector2(x, z).magnitude) * 0.3f;
                 if (_rng.NextDouble() > chance) continue;
@@ -373,6 +408,7 @@ namespace Beastbound.World
                 float d = new Vector2(x, z).magnitude;
                 float h = _terrain.HeightAt(x, z);
                 if (h < -0.6f || h > 40f) continue;
+                if (_terrain.SlopeAt(x, z) > 32f) continue; // boulders on cliffs overhang and look like they float
                 if (NearLandmark(x, z, 10f, 0f)) continue;
                 if (_terrain.PathMask(x, z) > 0.2f) continue;
                 if (Vector2.Distance(new Vector2(x, z), ValeLayout.PlayerSpawn) < 6f) continue;
@@ -385,10 +421,24 @@ namespace Beastbound.World
                 float s = big ? Rand(2.2f, 4.5f) : Rand(0.45f, 1.9f);
                 var scale = new Vector3(s * Rand(0.9f, 1.4f), s * Rand(0.6f, 1f), s * Rand(0.9f, 1.3f));
                 var rot = Quaternion.Euler(Rand(-8f, 8f), Rand(0f, 360f), Rand(-8f, 8f));
-                var pos = new Vector3(x, h - s * 0.15f, z);
-                var mesh = _rocks[_rng.Next(_rocks.Length)];
+                int pick = _rng.Next(_rocks.Length);
+                var mesh = _rocks[pick];
                 Swatch sw = _rng.NextDouble() < 0.35 ? Swatch.RockMoss : (_rng.NextDouble() < 0.5 ? Swatch.Rock : Swatch.RockDark);
-                ChunkAt(pos).Props.Add(mesh, Matrix4x4.TRS(pos, rot, scale), WorldPalette.UV(sw));
+                Vector3 pos;
+                if (_kitRocks != null)
+                {
+                    // Seat the rock on the lowest ground under its footprint so no side hangs in the air.
+                    float rr = Mathf.Max(scale.x, scale.z) * 0.8f;
+                    float low = Mathf.Min(h, Mathf.Min(Mathf.Min(_terrain.HeightAt(x + rr, z), _terrain.HeightAt(x - rr, z)),
+                        Mathf.Min(_terrain.HeightAt(x, z + rr), _terrain.HeightAt(x, z - rr))));
+                    pos = new Vector3(x, low - scale.y * 0.1f, z);
+                    AddKitRock(_kitRocks[pick], pos, rot, scale);
+                }
+                else
+                {
+                    pos = new Vector3(x, h - s * 0.15f, z);
+                    ChunkAt(pos).Props.Add(mesh, Matrix4x4.TRS(pos, rot, scale), WorldPalette.UV(sw));
+                }
 
                 if (s > 0.6f)
                 {
@@ -397,10 +447,29 @@ namespace Beastbound.World
                     go.transform.SetPositionAndRotation(pos, rot);
                     go.transform.localScale = scale;
                     var mc = go.AddComponent<MeshCollider>();
-                    mc.sharedMesh = mesh;
+                    // Imported meshes are only usable for physics when Read/Write is enabled.
+                    mc.sharedMesh = _kitRocks != null && _kitRocks[pick].isReadable ? _kitRocks[pick] : mesh;
                     mc.convex = true;
                 }
             }
+        }
+
+        private void AddKitRock(Mesh mesh, Vector3 pos, Quaternion rot, Vector3 scale)
+        {
+            if (_rockRoot == null)
+            {
+                _rockRoot = new GameObject("Rocks").transform;
+                _rockRoot.SetParent(_root, false);
+            }
+            var go = new GameObject("Rock");
+            go.transform.SetParent(_rockRoot, false);
+            go.transform.SetPositionAndRotation(pos, rot);
+            go.transform.localScale = scale;
+            go.isStatic = true;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = _kitMaterial;
+            mr.shadowCastingMode = ShadowCastingMode.On;
         }
 
         private void ScatterGrass()
@@ -573,16 +642,22 @@ namespace Beastbound.World
             AddNest(context, "nest_ruins", new Vector2(-42f, -32f), Personality.Sleepy, 5, 0.98f);
             AddNest(context, "nest_grove", new Vector2(-24f, 30f), Personality.Curious, 3, 1.0f);
             AddNest(context, "nest_knoll", new Vector2(50f, -30f), Personality.Playful, 4, 0.95f);
+            // The forest guardian lives alone in a clearing in the western woods.
+            AddNest(context, "nest_westwood", GuardianNest, Personality.Stubborn, 7, 1.04f, Creatures.DefaultContent.ThalorixId);
         }
 
-        private void AddNest(WorldContext context, string id, Vector2 xz, Personality personality, int level, float vigor)
+        /// <summary>Thalorix's clearing (same spot as the web edition).</summary>
+        public static readonly Vector2 GuardianNest = new Vector2(-64f, 6f);
+
+        private void AddNest(WorldContext context, string id, Vector2 xz, Personality personality, int level, float vigor,
+            string speciesId = Creatures.DefaultContent.PebbloomId)
         {
             var desired = new Vector3(xz.x, 0f, xz.y);
             context.TryFindWalkableNear(desired, 8f, out var pos, 30);
             context.Nests.Add(new NestPoint
             {
                 Id = id,
-                SpeciesId = Creatures.DefaultContent.PebbloomId,
+                SpeciesId = speciesId,
                 Position = pos,
                 Personality = personality,
                 Level = level,

@@ -3,7 +3,9 @@
     "rootNamespace": "Beastbound",
     "references": [
         "UnityEngine.UI",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -17,6 +19,11 @@
             "name": "com.unity.inputsystem",
             "expression": "1.0.0",
             "define": "BB_INPUT_SYSTEM"
+        },
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "14.0.0",
+            "define": "BB_URP"
         }
     ],
     "noEngineReferences": false

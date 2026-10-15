@@ -9,6 +9,7 @@ Run from the repository root, for example:
 import math
 import os
 import random
+import shutil
 
 import bmesh
 import bpy
@@ -16,6 +17,7 @@ from mathutils import Vector
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 EXPORT_DIR = os.path.join(ROOT, "web", "assets", "models")
+UNITY_MODELS_DIR = os.path.join(ROOT, "Assets", "Beastbound", "Resources", "Models")  # same files, imported by glTFast
 RENDER_DIR = os.path.join(ROOT, "art", "renders")
 TEX_DIR = os.path.join(ROOT, "art", "textures")
 
@@ -409,6 +411,8 @@ def export_glb(path, objects):
         export_tangents=False,
         export_materials="EXPORT",
     )
+    if os.path.isdir(UNITY_MODELS_DIR):
+        shutil.copyfile(path, os.path.join(UNITY_MODELS_DIR, os.path.basename(path)))
     return os.path.getsize(path)
 
 

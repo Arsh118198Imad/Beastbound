@@ -6,6 +6,8 @@ Explore **Sunmeadow Vale**, sneak up on (or battle) wild creatures, bind them wi
 > **Status: first playable prototype (v0.1).**
 > All C# code compiles against Unity reference assemblies with zero errors and zero warnings, and the rules unit tests pass (see [Validation](#validation)).
 > **It has not yet been opened or played in the Unity Editor.** Unity is not available in the environment where the code was written. Please follow the [testing checklist](docs/TESTING_CHECKLIST.md) the first time you press Play and report anything odd.
+>
+> **Unity is now the main version.** The Unity project has the graphics upgrade from the web edition's first steps: the Universal Render Pipeline with post-processing, the Blender-made Warden, Pebbloom and Thalorix with their procedural animation, momentum movement, and the Blender stone kit. One menu sets it up (see [step 3](#3-open-it-in-unity)). The URP setup code, the model import and the new animation code have only been compile-checked, not run in Unity yet.
 
 ---
 
@@ -47,13 +49,27 @@ The web edition was tested end-to-end in headless Chromium (title → stealth bi
 
 **Visual upgrade, step 0 (web only):** physically based sky with drifting clouds and sky-based ambient lighting, a golden-hour default, reflective water, alpha-cut leaf and needle foliage with wind, a detail-textured terrain, and a cinematic post-processing chain (HDR + MSAA, bloom, sun god rays, sharpening, colour grade, vignette), plus the gold BEASTBOUND title screen. Foliage between the camera and the Warden dissolves so trees never hide the player. Graphics presets: Low turns post-processing off; **Medium is the default** for typical laptops; High/Ultra raise resolution, shadows and grass. Frame rates were only measured in a software renderer here, so check real FPS on your own machine.
 
-**Blender models (web edition):** the Warden, the Pebbloom and a new creature, **Thalorix** (a maned forest guardian in the western woods), are now original rigged 3D models built by the scripts in [`art/blender/`](art/README.md) and loaded as `.glb` files. They are animated procedurally in code (walk/run/sneak, combo, cast, dodge; creature gait, sleep, wind-up, lunge, hurt). Boulders, the Waystone ring and the old ruins use a Blender stone kit (fractured rocks and chipped, mossy blocks with world-space stone detail). If a model file fails to load, the game falls back to the old primitive shapes. Trees are still procedural, and the Unity project has not been updated with these models yet.
+**Blender models (web edition):** the Warden, the Pebbloom and a new creature, **Thalorix** (a maned forest guardian in the western woods), are now original rigged 3D models built by the scripts in [`art/blender/`](art/README.md) and loaded as `.glb` files. They are animated procedurally in code (walk/run/sneak, combo, cast, dodge; creature gait, sleep, wind-up, lunge, hurt). Boulders, the Waystone ring and the old ruins use a Blender stone kit (fractured rocks and chipped, mossy blocks with world-space stone detail). If a model file fails to load, the game falls back to the old primitive shapes. Trees are still procedural. The Unity project uses the same model files (see [Unity graphics](#unity-graphics-upgrade)).
 
 **Art style (web edition):** the default is **Stylized**, a bright, cel-shaded look with soft two-step lighting, ink outlines on the Warden and creatures, and a cleaner colour grade. **Realistic** (smooth physically based lighting) is still available under Settings → Art style; switching saves your journey and reloads the page.
 
 **Movement and nature (web edition):** the Warden accelerates, brakes and turns with momentum (plant-and-pivot when reversing at a run) and has a stride-locked walk/run/sneak cycle with knee and ankle roll-through, pelvis bob and sway, counter-rotating shoulders, a steady head, and leans into acceleration and turns. Creatures use a four-beat walk that blends into a trot and bend into turns. Grass is instanced: curved, sharp-tipped blades with a midrib, veins and dry tips that sway in the wind and part around the Warden (staying bent along a short trail) and nearby creatures. Trees use sharp, serrated leaf sprays and fine needle sprays with crisp antialiased edges. Meadows have wildflower patches (poppies, daisies, lavender, buttercups) that sway in the wind. The HUD shows an ability bar (Strike, Ember Spark, Dodge, Bind) with cooldown sweeps and your partner's health, and the game lowers graphics quality one step if it stays slow for a few seconds (Settings → Auto-lower quality if slow).
 
 **Interface (web edition):** a dark-and-gold theme with serif headings, a compass strip with landmark markers (Waystone, ruins, lake, the guardian's woods), a circular minimap that turns with the camera, and a redesigned Bestiary (creature list, lit 3D portrait on a stage, stats, abilities with element tags, temperament and lore).
+
+---
+
+## Unity graphics upgrade
+
+**Unity is now the main version** and gets the high-end graphics work. What is in so far:
+
+- **Universal Render Pipeline (URP)** with HDR, soft shadows (4 cascades), screen-space ambient occlusion and a post-processing stack: ACES tonemapping, a warm golden-hour colour grade, bloom on glowing crystals and veins, vignette and SMAA anti-aliasing. Graphics quality (Low to Ultra) changes shadow distance, cascades, MSAA and bloom. Set up by **Beastbound → Setup** (see step 3); code in `Scripts/Editor/GraphicsSetup.cs` and `Scripts/Runtime/Core/PostFxRig.cs`.
+- **Blender models**: the Warden, Pebbloom and **Thalorix** (the forest guardian, now also in Unity, in a clearing in the western woods) are the same `.glb` files as the web edition, in `Assets/Beastbound/Resources/Models/`, imported by glTFast. Re-running a script in `art/blender/` updates both editions.
+- **Procedural animation ported from the web edition** with the same pose numbers: stride-locked walk/run/sneak with pelvis bob, knee and ankle roll, banking into turns and staff combos for the Warden (`Player/WardenRig.cs`); four-beat walk into trot, spine bend into turns, ears, tail follow-through, sleep/lie-down, wind-up and glow for creatures (`Creatures/QuadrupedRig.cs`, `Creatures/BonePoser.cs`).
+- **Momentum movement**: the Warden speeds up, brakes and turns at human-like rates, with plant-and-pivot when reversing at a run (`Player/PlayerController.cs`).
+- **Stone kit**: Blender boulders and chipped cut-stone blocks for the Waystone ring and ruins.
+
+If the models are missing (glTFast not installed), everything falls back to the simple procedural shapes. Still to come in Unity: cel-shaded art style and outlines, instanced trampling grass, leaf-card trees and wildflowers, compass and minimap, ability bar, and the dark-and-gold Bestiary.
 
 ---
 
@@ -83,10 +99,11 @@ git clone https://github.com/Arsh118198Imad/Beastbound.git
 2. Click the project to open it.
    - If the Hub says the editor version `6000.3.3f1` is not installed, choose **your installed 6000.3.x** version and confirm. This is normal; Unity will update the version file.
 3. The first import takes a few minutes. Unity creates the `Library`, `Packages` and remaining `ProjectSettings` files automatically.
-4. **Recommended – install the Input System package for full gamepad support:**
-   *Window → Package Manager → Unity Registry → Input System → Install.*
-   When Unity asks to enable the new input backends and restart, click **Yes**.
-   (The game also works without it, using keyboard and mouse through the older Input Manager.)
+4. **Set up the graphics and gamepad support (one click):** top menu **Beastbound → Setup → 1. Install Packages**, then click **Install**.
+   - This installs three free Unity packages: **Universal Render Pipeline** (lighting, soft shadows, post-processing), **Input System** (gamepads) and **glTFast** (imports the Blender models).
+   - It needs an internet connection and takes a few minutes. If Unity asks to enable the new input backends and restart, click **Yes**.
+   - When Unity has finished compiling, it configures the graphics by itself and shows **"Beastbound graphics ready"**. If that window does not appear, run **Beastbound → Setup → 2. Configure Graphics (URP)**.
+   - (The game also runs without these packages: it then uses the simple built-in shapes and the older Input Manager.)
 
 ## 4. Create the scene and press Play
 
@@ -100,7 +117,7 @@ Tip: maximise the Game view (*right-click its tab → Maximize* or press `Shift+
 
 ## 5. How to play
 
-**Your goal:** find the wild Pebblooms of Sunmeadow Vale and bind them. The objective panel (top-left) always tells you what to do next.
+**Your goal:** find the wild creatures of Sunmeadow Vale (five Pebblooms and a Thalorix guarding the western woods) and bind them. The objective panel (top-left) always tells you what to do next.
 
 | Action | Keyboard & mouse | Gamepad* |
 |---|---|---|

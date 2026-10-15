@@ -314,7 +314,7 @@ namespace Beastbound.Core
 
         private void OnBattleEnded(BattleOutcome outcome, Creature creature)
         {
-            if (outcome == BattleOutcome.Victory) UI?.ShowBanner("Victory!", "Bind the exhausted Pebbloom before it recovers.");
+            if (outcome == BattleOutcome.Victory) UI?.ShowBanner("Victory!", "Bind the exhausted creature before it recovers.");
         }
 
         // ------------------------------------------------------------------ Settings
@@ -396,6 +396,7 @@ namespace Beastbound.Core
             }
 
             QualitySettings.realtimeReflectionProbes = true; // sky reflections on water and crystals
+            PostFxRig.ApplyQuality(s.quality); // URP shadow/AA/bloom settings (no-op on the Built-in pipeline)
             QualitySettings.vSyncCount = s.vsync ? 1 : 0;
             int cap = SettingsData.FrameCaps[Mathf.Clamp(s.frameCapIndex, 0, SettingsData.FrameCaps.Length - 1)];
             Application.targetFrameRate = s.vsync || cap <= 0 ? -1 : cap;

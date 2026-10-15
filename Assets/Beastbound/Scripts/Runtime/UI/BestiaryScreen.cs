@@ -135,7 +135,7 @@ namespace Beastbound.UI
             {
                 _detail.gameObject.SetActive(false);
                 _empty.gameObject.SetActive(true);
-                _empty.text = "No creatures bound yet.\n\nFind a wild Pebbloom, sneak up or weaken it,\n" +
+                _empty.text = "No creatures bound yet.\n\nFind a wild creature, sneak up or weaken it,\n" +
                               $"then press [{GameInput.Prompt("Bind")}] to throw a Bind Orb.";
                 _portrait?.Show(null, null);
                 return;
@@ -298,12 +298,11 @@ namespace Beastbound.UI
             var holder = new GameObject("Model");
             holder.layer = Layers.Preview;
             holder.transform.SetParent(_turntable, false);
-            int variantSeed = string.IsNullOrEmpty(record.uid) ? 0 : record.uid.GetHashCode() & 0x7;
-            var parts = PebbloomModel.Build(holder.transform, species.palette, species.modelScale, variantSeed);
+            // The large guardian is shrunk so it fits the same framing as a Pebbloom.
+            if (species.model == CreatureModelKind.Thalorix) holder.transform.localScale = Vector3.one * 0.55f;
+            var anim = CreatureVisuals.Attach(holder, species, record.uid);
+            anim.UseUnscaledTime = true; // the game is paused while browsing
             Layers.SetLayerRecursively(holder, Layers.Preview);
-            var anim = holder.AddComponent<CreatureAnimator>();
-            anim.BaseScale = species.modelScale;
-            anim.Initialize(parts, species.palette.crystalGlow);
             _model = holder;
         }
 

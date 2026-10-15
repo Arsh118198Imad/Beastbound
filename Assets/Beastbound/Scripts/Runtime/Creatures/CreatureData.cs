@@ -29,6 +29,14 @@ namespace Beastbound.Creatures
         [Min(0f)] public float projectileSpeed = 14f;
         [Min(0f)] public float knockback = 3f;
         [Min(0.1f)] public float hitRadius = 1.1f;
+
+        [Header("Projectile look")]
+        public Color projectileColor = new Color(0.6f, 0.62f, 0.5f);
+        [Tooltip("Black = no glow.")]
+        public Color projectileGlow = Color.black;
+        [Min(0.05f)] public float projectileSize = 0.28f;
+        [Tooltip("Gravity on the projectile. 0 = flies straight (energy bolts).")]
+        public float projectileGravity = -9f;
     }
 
     /// <summary>Colours for the procedural creature model, so variants can be made without new art.</summary>
@@ -48,7 +56,8 @@ namespace Beastbound.Creatures
 
     public enum CreatureModelKind
     {
-        Pebbloom = 0
+        Pebbloom = 0,
+        Thalorix = 1
     }
 
     /// <summary>

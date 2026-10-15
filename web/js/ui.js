@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Events } from './events.js';
 import { StatRules, Species, CaptureRules } from './rules.js';
-import { buildPebbloom, CreatureAnimator } from './creatures.js';
+import { buildCreatureParts, createAnimator } from './creatures.js';
 import { QualityNames, FrameCaps, defaultSettings, Saves } from './save.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -293,9 +293,11 @@ export class UI {
     const p = this.portrait;
     if (p.failed || p.uid === record.uid) return;
     if (p.model) p.turntable.remove(p.model.root);
-    p.model = buildPebbloom(hash(record.uid) & 7);
+    p.model = buildCreatureParts(record.speciesId, hash(record.uid) & 7);
+    const big = record.speciesId === 'thalorix';
+    p.turntable.scale.setScalar(big ? 0.62 : 1);
     p.turntable.add(p.model.root);
-    p.anim = new CreatureAnimator(p.model, 5.6);
+    p.anim = createAnimator(p.model, 5.6);
     p.uid = record.uid;
   }
 

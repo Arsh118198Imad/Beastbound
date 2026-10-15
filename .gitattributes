@@ -19,6 +19,8 @@
 *.jpg  binary
 *.psd  binary
 *.fbx  binary
+*.glb  binary
+*.blend binary
 *.wav  binary
 *.mp3  binary
 *.ogg  binary

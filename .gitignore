@@ -77,3 +77,7 @@ Desktop.ini
 *.key
 *.keystore
 *.p12
+
+# Intermediate textures baked by art/blender scripts (embedded in the exported .glb)
+art/textures/
+__pycache__/

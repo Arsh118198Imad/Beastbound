@@ -5,6 +5,7 @@ import { clamp, clamp01, lerp, damp, srgb } from './util.js';
 import { CaptureRules, Awareness, Personality, StatRules, Species } from './rules.js';
 import { Health, Faction, Targets } from './combat.js';
 import { Events } from './events.js';
+import { Models } from './render/models.js';
 
 const SPHERE = new THREE.SphereGeometry(0.5, 18, 12);
 const CAPSULE = new THREE.CapsuleGeometry(0.5, 1, 6, 12);
@@ -162,6 +163,142 @@ export class CreatureAnimator {
   }
 }
 
+/** Picks the model for a species: Blender .glb when loaded, primitive Pebbloom otherwise. */
+export function buildCreatureParts(speciesId, variant = 0) {
+  if (speciesId === 'thalorix') {
+    const m = Models.instance('thalorix');
+    if (m) {
+      const root = new THREE.Group();
+      const scale = 1.2; // a guardian: noticeably larger than the Warden's knee-high Pebblooms
+      m.root.scale.setScalar(scale);
+      root.add(m.root);
+      const glowMats = m.materials.filter((x) => x.emissive && (x.emissiveMap || x.emissive.getHex() !== 0));
+      for (const mat of glowMats) mat.userData.baseEmissive = mat.emissiveIntensity;
+      return { root, bones: m.bones, glowMats, skinned: true, scale };
+    }
+    const fallback = buildPebbloom(variant);
+    fallback.root.scale.setScalar(1.6);
+    return fallback;
+  }
+  return buildPebbloom(variant);
+}
+
+export function createAnimator(parts, maxSpeed) {
+  return parts.skinned ? new QuadrupedAnimator(parts, maxSpeed) : new CreatureAnimator(parts, maxSpeed);
+}
+
+/**
+ * Procedural animation for skinned quadrupeds (Blender rigs with named bones): trot gait, breathing,
+ * look-around, ears, tail, sleep/exhausted lie-down, wind-up crouch, lunge, hurt, binding shake, glow.
+ * Same public API as CreatureAnimator.
+ */
+export class QuadrupedAnimator {
+  constructor(parts, maxSpeed) {
+    this.p = parts; this.maxSpeed = maxSpeed;
+    this.speed = 0; this.smoothed = 0; this.phase = Math.random() * 10; this.pose = 'Normal';
+    this.hurt = 0; this.lunge = 0; this.happy = 0; this.blend = 0; this.glow = 0; this.windup = 0; this.alert = 0;
+    parts.root.updateMatrixWorld(true);
+    this.rest = {}; this.parentRot = {};
+    const tmp = new THREE.Quaternion();
+    for (const [name, b] of Object.entries(parts.bones)) {
+      this.rest[name] = b.quaternion.clone();
+      b.parent.getWorldQuaternion(tmp);
+      this.parentRot[name] = tmp.clone();
+    }
+    this.q = new THREE.Quaternion(); this.e = new THREE.Euler();
+    this.s = parts.scale || 1;
+  }
+  playHurt() { this.hurt = 0.25; }
+  playLunge() { this.lunge = 0.3; }
+  playHappy() { this.happy = 0.8; }
+  addGlow(a) { this.glow = Math.max(this.glow, a); }
+
+  /** Rotates a bone by model-space angles in degrees (x pitches down, y turns, z rolls). */
+  set(name, x, y = 0, z = 0) {
+    const b = this.p.bones[name];
+    if (!b) return;
+    const P = this.parentRot[name];
+    this.q.setFromEuler(this.e.set(x * toRad, y * toRad, z * toRad, 'YXZ'));
+    b.quaternion.copy(P).invert().multiply(this.q).multiply(P).multiply(this.rest[name]);
+  }
+
+  update(dt, t) {
+    const p = this.p;
+    this.smoothed = lerp(this.smoothed, this.speed, damp(8, dt));
+    const move = clamp01(this.smoothed / Math.max(0.1, this.maxSpeed));
+    const walk = clamp01(this.smoothed / 0.8);
+    if (this.smoothed > 0.05) this.phase += dt * (3.2 + this.smoothed * 1.5);
+    const sleeping = this.pose === 'Sleeping', exhausted = this.pose === 'Exhausted', low = sleeping || exhausted;
+    this.blend += clamp((low ? 1 : 0) - this.blend, -dt * 1.6, dt * 1.6);
+    this.windup += clamp((this.pose === 'Windup' ? 1 : 0) - this.windup, -dt * 6, dt * 6);
+    this.alert += clamp((this.pose === 'Alert' || this.pose === 'Windup' ? 1 : 0) - this.alert, -dt * 4, dt * 4);
+    const L = this.blend, W = this.windup, A = this.alert, up = 1 - L;
+    const breathe = Math.sin(t * (sleeping ? 1.1 : 1.8));
+
+    // Root: trot bounce, lie down, crouch, lunge, hurt squash, binding shake.
+    let happyHop = 0;
+    if (this.happy > 0) { this.happy -= dt; happyHop = Math.abs(Math.sin(this.happy * 10)) * 0.22; }
+    let y = (Math.abs(Math.cos(this.phase)) - 0.5) * 0.05 * walk * up + happyHop - 0.6 * L - 0.1 * W, z = -0.1 * W;
+    if (this.lunge > 0) { this.lunge -= dt; z += Math.sin(this.lunge / 0.3 * Math.PI) * 0.6; }
+    p.root.position.set(0, y * this.s, z * this.s);
+    let sx = 1, sy = 1 + breathe * 0.012, sz = 1;
+    if (this.hurt > 0) { this.hurt -= dt; const k = this.hurt / 0.25; sx *= 1 + 0.07 * k; sy *= 1 - 0.09 * k; sz *= 1 + 0.05 * k; }
+    p.root.scale.set(sx, sy, sz);
+    if (this.pose === 'Binding') p.root.quaternion.copy(quat(0, Math.sin(t * 38) * 7, Math.sin(t * 31) * 3));
+    else if (exhausted) p.root.quaternion.copy(quat(0, 0, 8 * L));
+    else p.root.quaternion.identity();
+
+    // Spine, neck and head.
+    const sway = Math.sin(this.phase) * 3 * walk * up;
+    this.set('hips', 0, sway, 0);
+    this.set('spine', -3 * W, -sway * 0.5, 0);
+    this.set('chest', 4 * W, -sway * 0.5, 0);
+    const look = Math.sin(t * 0.45) * 22 * (1 - move) * up * (1 - A);
+    const nod = Math.sin(this.phase * 2) * 3 * walk;
+    this.set('neck', -10 * A + 16 * W + 18 * L + (exhausted ? 22 * L : 0) + breathe * 1.5, look * 0.4, 0);
+    this.set('head', nod - 6 * A + 12 * W + 10 * L, look * 0.6, Math.sin(t * 0.3) * 3 * up + (sleeping ? 14 * L : 0));
+
+    // Ears: perk forward when alert, pin back during a wind-up, droop when resting.
+    const flick = Math.sin(t * 1.3 + 1) * 4 + (((t * 0.37) % 3) < 0.12 ? 18 : 0);
+    const earX = 12 * A - 45 * W - 30 * L + flick;
+    this.set('earL', earX, 0, -14 * L);
+    this.set('earR', earX, 0, 14 * L);
+
+    // Tail: wag with lag down the chain; raised when alert, low when resting.
+    const wagSpeed = this.happy > 0 ? 14 : lerp(2, 7, move);
+    const wagAmp = (this.happy > 0 ? 26 : lerp(9, 15, move)) * (1 - L * 0.7);
+    this.set('tail1', 16 * A - 14 * L + 8 * W, Math.sin(t * wagSpeed) * wagAmp * 0.5, 0);
+    this.set('tail2', 6 * A - 10 * L, Math.sin(t * wagSpeed - 0.6) * wagAmp * 0.6, 0);
+    this.set('tail3', -6 * L, Math.sin(t * wagSpeed - 1.2) * wagAmp * 0.8, 0);
+
+    // Legs: diagonal trot. Negative x swings a leg forward; lift bends the lower joints.
+    const amp = lerp(22, 34, move) * walk * up;
+    for (const [k, off] of [['FL', 0], ['HR', 0], ['FR', Math.PI], ['HL', Math.PI]]) {
+      const ph = this.phase + off;
+      const swing = -Math.sin(ph) * amp;
+      const lift = Math.max(0, Math.cos(ph)) * walk * up;
+      if (k[0] === 'F') {
+        this.set(`leg${k}1`, swing - 74 * L - 10 * W);
+        this.set(`leg${k}2`, lift * 18 + 8 * L);
+        this.set(`leg${k}3`, lift * 55 + 4 * L);
+      } else {
+        this.set(`leg${k}1`, swing - 62 * L - 16 * W);
+        this.set(`leg${k}2`, lift * 40 + 128 * L + 26 * W);
+        this.set(`leg${k}3`, -lift * 30 - 58 * L - 10 * W);
+      }
+    }
+
+    // Eyes close for sleep and blinks; veins, eyes and horn crystals pulse.
+    const blink = ((t + this.phase * 0.01) % 4.3) < 0.13 ? 0.1 : 1;
+    const open = sleeping ? 0.04 : exhausted ? 0.45 : blink;
+    for (const e of ['eyeL', 'eyeR']) if (p.bones[e]) p.bones[e].scale.setScalar(open);
+    this.glow = Math.max(0, this.glow - dt * 1.5);
+    let pulse = 0.85 + Math.sin(t * 1.6) * 0.15 + this.glow * 1.5;
+    if (sleeping) pulse *= 0.35;
+    for (const m of p.glowMats) m.emissiveIntensity = m.userData.baseEmissive * pulse;
+  }
+}
+
 // ====================================================================== Creature entity
 
 export class Creature {
@@ -174,15 +311,15 @@ export class Creature {
     this.stats = StatRules.compute(this.species.base, record.level, record.personality, record.vigor);
     this.health = new Health(this, role === 'Wild' ? Faction.Wild : Faction.Companion, this.stats.maxHealth, this.stats.defense, this.species.element);
     this.failedBinds = 0;
-    this.radius = 0.42;
+    this.radius = this.species.radius || 0.42;
     this.position = position.clone();
     this.yaw = yaw;
     this.group = new THREE.Group();
-    this.parts = buildPebbloom(hashCode(record.uid) & 7);
+    this.parts = buildCreatureParts(record.speciesId, hashCode(record.uid) & 7);
     this.group.add(this.parts.root);
     this.group.position.copy(position);
     game.scene.add(this.group);
-    this.anim = new CreatureAnimator(this.parts, this.species.runSpeed);
+    this.anim = createAnimator(this.parts, this.species.runSpeed);
     // Motor
     this.velocity = new THREE.Vector3();
     this.desired = new THREE.Vector3();
@@ -200,8 +337,8 @@ export class Creature {
 
   get isWild() { return this.role === 'Wild'; }
   get name() { return this.record.nickname || this.species.name; }
-  get center() { return this.position.clone().setY(this.position.y + 0.55); }
-  get markerPoint() { return this.position.clone().setY(this.position.y + 1.75); }
+  get center() { return this.position.clone().setY(this.position.y + (this.species.centerHeight || 0.55)); }
+  get markerPoint() { return this.position.clone().setY(this.position.y + (this.species.markerHeight || 1.75)); }
   get home() { return this.nest ? this.nest.position : this.position; }
   get homeRadius() { return this.nest ? this.nest.homeRadius : 10; }
   get forward() { return new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)); }
@@ -555,8 +692,8 @@ export class Brain {
       const aim = tp.clone(); aim.y += 0.9;
       const speed = Math.max(5, a.speed), flight = origin.distanceTo(aim) / speed, grav = -9;
       const vel = aim.clone().sub(origin).divideScalar(flight); vel.y -= 0.5 * grav * flight;
-      g.projectiles.spawn({ position: origin, velocity: vel, faction, owner: c, power: a.power, attack: c.stats.attack, element: a.element, radius: a.radius, knockback: a.knockback, color: srgb(0.6, 0.62, 0.5), scale: 0.28, gravity: grav, life: 4 });
-      c.anim.playLunge(); this.sfx('pebble', 0.8);
+      g.projectiles.spawn({ position: origin, velocity: vel, faction, owner: c, power: a.power, attack: c.stats.attack, element: a.element, radius: a.radius, knockback: a.knockback, color: srgb(...(a.color || [0.6, 0.62, 0.5])), emissive: a.emissive ? srgb(...a.emissive) : null, scale: a.scale || 0.28, gravity: grav, life: 4 });
+      c.anim.playLunge(); c.anim.addGlow(0.8); this.sfx('pebble', 0.8);
     } else if (a.kind === 'charge') {
       const dir = tp.clone().sub(c.position); dir.y = 0;
       this.chargeDir = dir.lengthSq() > 0.01 ? dir.clone().normalize() : c.forward;

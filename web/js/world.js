@@ -32,6 +32,7 @@ export const Layout = {
     { id: 'nest_ruins', xz: [-42, -32], personality: Personality.Sleepy, level: 5, vigor: 0.98 },
     { id: 'nest_grove', xz: [-24, 30], personality: Personality.Curious, level: 3, vigor: 1.0 },
     { id: 'nest_knoll', xz: [50, -30], personality: Personality.Playful, level: 4, vigor: 0.95 },
+    { id: 'nest_westwood', xz: [-64, 6], speciesId: 'thalorix', personality: Personality.Stubborn, level: 7, vigor: 1.04 },
   ],
 };
 
@@ -518,6 +519,7 @@ export class World {
       const h = T.heightAt(x, z);
       if (h < 0.6 || h > 30 || T.slopeAt(x, z) > 30 || this.nearLandmark(x, z, 13, 11) || T.pathMask(x, z) > 0.1) continue;
       if (Math.hypot(x - Layout.playerSpawn[0], z - Layout.playerSpawn[1]) < 9) continue;
+      if (Layout.nests.some((n) => n.speciesId && Math.hypot(x - n.xz[0], z - n.xz[1]) < 7)) continue;
       const forest = T.forestMask(x, z);
       const chance = 0.035 + forest * 0.9 + smoothstep(80, 110, Math.hypot(x, z)) * 0.3;
       if (rng() > chance) continue;
@@ -751,7 +753,7 @@ export class World {
   defineNests() {
     for (const n of Layout.nests) {
       const p = this.findWalkableNear(n.xz[0], n.xz[1], 8, 40) || new THREE.Vector3(n.xz[0], this.heightAt(n.xz[0], n.xz[1]), n.xz[1]);
-      this.nests.push({ ...n, speciesId: 'pebbloom', position: p, homeRadius: 11 });
+      this.nests.push({ ...n, speciesId: n.speciesId || 'pebbloom', position: p, homeRadius: n.speciesId === 'thalorix' ? 14 : 11 });
     }
   }
 

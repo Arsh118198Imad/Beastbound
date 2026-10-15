@@ -1,6 +1,7 @@
 // Beastbound (web edition) — game bootstrap, state flow, systems hub and main loop.
 import * as THREE from 'three';
 import { World, occlusionUniforms } from './world.js';
+import { Models } from './render/models.js';
 import { Player } from './player.js';
 import { OrbitCamera } from './camera.js';
 import { Creature } from './creatures.js';
@@ -35,15 +36,21 @@ class Objectives {
     Events.on('spotted', () => { if (this.step === 0) this.advance(1); });
     Events.on('bestiaryOpened', () => { this.bestiaryOpened = true; this.refresh(); });
   }
-  reset() { this.step = 0; this.bestiaryOpened = false; }
+  reset() { this.step = 0; this.bestiaryOpened = false; this.metGuardian = false; }
   remaining() { return this.game.world.nests.filter((n) => !this.game.collection.nests.has(n.id)).length; }
   advance(s) { if (s > this.step) { this.step = s; this.refresh(); } }
   update() {
-    if (this.step !== 0 || this.game.state !== 'playing') return;
+    if (this.game.state !== 'playing') return;
     const p = this.game.player.position;
-    if (this.game.creatures.some((c) => c.isWild && c.position.distanceToSquared(p) < 14 * 14)) {
+    if (!this.metGuardian) {
+      const g = this.game.creatures.find((c) => c.isWild && c.species.id === 'thalorix' && c.position.distanceToSquared(p) < 24 * 24);
+      if (g) { this.metGuardian = true; this.game.ui.banner('Thalorix', 'Forest Guardian of the western woods'); this.game.sfx('discovery', null, 0.6); }
+    }
+    if (this.step !== 0) return;
+    const near = this.game.creatures.find((c) => c.isWild && c.position.distanceToSquared(p) < 14 * 14);
+    if (near) {
       this.advance(1);
-      Events.notify('A wild Pebbloom! Sneak closer, or weaken it, then bind it.', 'discovery');
+      Events.notify(`A wild ${near.species.name}! Sneak closer, or weaken it, then bind it.`, 'discovery');
       this.game.sfx('discovery', null, 0.6);
     }
   }
@@ -55,7 +62,7 @@ class Objectives {
     if (s === 3 && this.remaining() === 0) s = 4;
     if (s !== this.step) {
       this.step = s;
-      if (s === 4) Events.notify('Every Pebbloom in Sunmeadow Vale is bound. Prototype complete — thank you for playing!', 'discovery');
+      if (s === 4) Events.notify('Every creature in Sunmeadow Vale is bound. Prototype complete — thank you for playing!', 'discovery');
     }
   }
   get title() { return ['Explore Sunmeadow Vale', 'Bind a Pebbloom', 'Meet your partner', 'Befriend the vale', 'Sunmeadow Vale complete'][this.step]; }
@@ -65,7 +72,7 @@ class Objectives {
       case 0: return 'Wild Pebblooms live around the meadow, the lake and the old ruins. Find one.';
       case 1: return `Sneak ${P('Sneak')} to stay unnoticed, or weaken it with ${P('Attack')} / ${P('Spark')}. Then press ${P('Bind')} to throw a Bind Orb — the chance is shown on screen.`;
       case 2: return `Open your Bestiary ${P('Bestiary')} to see your new partner's stats.`;
-      case 3: { const t = this.game.world.nests.length; return `Bind every Pebbloom in the vale (${t - this.remaining()}/${t}). Each has its own personality.`; }
+      case 3: { const t = this.game.world.nests.length; return `Bind every creature in the vale (${t - this.remaining()}/${t}) — the Thalorix guards the western woods.`; }
       default: return 'Keep exploring! More regions and creatures arrive in future milestones.';
     }
   }
@@ -107,7 +114,7 @@ class Game {
     this.ui = new UI(this);
     this.spawnWild();
     this.applySettings();
-    Events.on('battleEnded', (outcome) => { if (outcome === 'Victory') { this.ui.banner('Victory!', 'Bind the exhausted Pebbloom before it recovers.'); this.sfx('victory'); } });
+    Events.on('battleEnded', (outcome) => { if (outcome === 'Victory') { this.ui.banner('Victory!', 'Bind the exhausted creature before it recovers.'); this.sfx('victory'); } });
     Events.on('battleStarted', () => this.sfx('battleStart'));
     Events.on('spotted', (id) => this.collection.seen.add(id));
     this.canvas.addEventListener('click', () => {
@@ -409,9 +416,12 @@ try {
   if (!(probe.getContext('webgl2') || probe.getContext('webgl'))) throw new Error('WebGL is not available');
   const game = new Game();
   window.beastbound = game; // handy for debugging in the browser console
-  setTimeout(() => {
+  const t = document.getElementById('loading-text');
+  if (t) t.textContent = 'Waking the creatures…';
+  Models.preload().finally(() => setTimeout(() => {
+    if (t) t.textContent = 'Growing Sunmeadow Vale…';
     try { game.boot(); } catch (e) { console.error(e); fail(`Beastbound could not start: ${e.message}`); }
-  }, 30);
+  }, 30));
 } catch (e) {
   console.error(e);
   fail('Beastbound needs WebGL. Please use a recent desktop browser (Chrome, Edge, Firefox or Safari) with hardware acceleration enabled.');

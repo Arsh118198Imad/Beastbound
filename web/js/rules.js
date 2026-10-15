@@ -90,6 +90,9 @@ export const Attacks = {
   pebbleToss: { id: 'pebble_toss', name: 'Pebble Toss', kind: 'projectile', element: Element.Stone, power: 9, range: 13, cooldown: 2.6, windup: 0.55, speed: 15, knockback: 2.5, radius: 0.55 },
   brambleRush: { id: 'bramble_rush', name: 'Bramble Rush', kind: 'charge', element: Element.Verdant, power: 14, range: 7, cooldown: 4.2, windup: 0.7, speed: 11, knockback: 6, radius: 1.1 },
   petalSwipe: { id: 'petal_swipe', name: 'Petal Swipe', kind: 'melee', element: Element.Verdant, power: 8, range: 2.2, cooldown: 1.6, windup: 0.35, speed: 0, knockback: 3, radius: 1.3 },
+  thornfangLunge: { id: 'thornfang_lunge', name: 'Thornfang Lunge', kind: 'charge', element: Element.Verdant, power: 17, range: 9, cooldown: 4.6, windup: 0.85, speed: 12.5, knockback: 7, radius: 1.4 },
+  veinlightBolt: { id: 'veinlight_bolt', name: 'Veinlight Bolt', kind: 'projectile', element: Element.Verdant, power: 11, range: 15, cooldown: 2.9, windup: 0.6, speed: 17, knockback: 3, radius: 0.6, color: [0.35, 0.78, 1], emissive: [0.3, 0.75, 1], scale: 0.3 },
+  guardianSwipe: { id: 'guardian_swipe', name: 'Guardian Swipe', kind: 'melee', element: Element.Verdant, power: 12, range: 2.9, cooldown: 1.9, windup: 0.45, speed: 0, knockback: 4.5, radius: 1.7 },
 };
 
 export const Species = {
@@ -105,6 +108,20 @@ export const Species = {
     attacks: [Attacks.pebbleToss, Attacks.brambleRush, Attacks.petalSwipe],
     walkSpeed: 1.9, runSpeed: 5.6,
     sightRadius: 16, fov: 150, hearingRadius: 8, closeRadius: 2.4,
+  },
+  thalorix: {
+    id: 'thalorix',
+    name: 'Thalorix',
+    element: Element.Verdant,
+    description: 'A maned forest guardian, part wolf and part lion. Blue light runs through the veins of its legs and face, and its swept-back horns end in living crystal that brightens when it is about to strike.',
+    habitat: 'Deep, quiet woodland at the western edge of Sunmeadow Vale.',
+    lore: 'Old wardens say a Thalorix chooses whom it follows. It will not be rushed — only patience, or a fair fight, earns its trust.',
+    base: { maxHealth: 92, attack: 15, defense: 15, speed: 12 },
+    captureRate: 0.16,
+    attacks: [Attacks.thornfangLunge, Attacks.veinlightBolt, Attacks.guardianSwipe],
+    walkSpeed: 2.3, runSpeed: 7.2,
+    sightRadius: 20, fov: 160, hearingRadius: 10, closeRadius: 3.2,
+    radius: 0.85, centerHeight: 1.15, markerHeight: 2.85,
   },
 };
 

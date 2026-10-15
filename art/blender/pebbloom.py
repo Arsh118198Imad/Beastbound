@@ -140,9 +140,48 @@ def build_face():
         C.colorize(e, lambda p: V((0.015, 0.012, 0.02)))
     for e in shines:
         C.colorize(e, lambda p: V((1, 1, 1)))
+    # Iris with a darker rim and a pupil, set into the front of each eye.
+    for s_ in (-1, 1):
+        c = V((0.1 * s_, -0.648, 0.768))
+        iris = C.uv_sphere(f"iris{s_}", tuple(c), (0.041, 0.011, 0.048), 16, 8)
+        C.colorize(iris, lambda p, c=c: V((0.62, 0.42, 0.08)).lerp(V((0.18, 0.1, 0.02)), min(1.0, ((p.x - c.x) ** 2 / 0.041 ** 2 + (p.z - c.z) ** 2 / 0.048 ** 2) ** 0.5) ** 3))
+        pupil = C.uv_sphere(f"pupil{s_}", (0.099 * s_, -0.657, 0.77), (0.021, 0.006, 0.029), 12, 6)
+        C.colorize(pupil, lambda p: V((0.01, 0.008, 0.012)))
+        eyes.append(iris); eyes.append(pupil)
+    for sh in shines:
+        for v in sh.data.vertices:
+            v.co.y -= 0.01
     nose = C.uv_sphere("nose", (0, -0.725, 0.68), (0.03, 0.02, 0.022), 10, 6)
     C.colorize(nose, lambda p: V((0.03, 0.02, 0.02)))
     return eyes, shines, nose
+
+
+def build_tufts():
+    """Soft fur tufts: cheeks, chest ruff, crown and elbows (breaks up the smooth silhouette)."""
+    parts, cols = [], []
+    body, belly = V(PAL["body"]), V(PAL["belly"])
+    for s_ in (-1, 1):
+        for i in range(9):
+            root = J["skull"] + V((0.19 * s_, R.uniform(-0.02, 0.08), R.uniform(-0.12, -0.02)))
+            parts.append(C.fur_clump(f"cheek{s_}{i}", root, V((0.8 * s_, R.uniform(0.2, 0.6), -0.35)), R.uniform(0.045, 0.075), 0.018, R, droop=0.4, sides=4, segs=4))
+            cols.append(belly * 0.75)
+        for leg in ("F", "H"):
+            pts = LEGS[f"{leg}{'L' if s_ > 0 else 'R'}"]
+            for i in range(4):
+                root = pts[0].lerp(pts[1], R.uniform(0.5, 0.95)) + V((0, 0.05 if leg == "F" else 0.07, 0))
+                parts.append(C.fur_clump(f"elb{leg}{s_}{i}", root, V((0.2 * s_, 1.0, -0.4)), R.uniform(0.05, 0.08), 0.015, R, droop=0.3, sides=4, segs=4))
+                cols.append(body * 1.1)
+    for i in range(22):
+        root = J["chest"].lerp(J["neck"], R.uniform(0.1, 0.9)) + V((R.uniform(-0.13, 0.13), -0.16, -0.1))
+        parts.append(C.fur_clump(f"ruff{i}", root, V((R.uniform(-0.3, 0.3), -0.3, -1.0)), R.uniform(0.045, 0.07), 0.022, R, droop=0.5, sides=4, segs=4))
+        cols.append(belly * 0.72)
+    for i in range(6):
+        root = J["skullB"] + V((R.uniform(-0.05, 0.05), R.uniform(-0.03, 0.04), 0.2))
+        parts.append(C.fur_clump(f"crown{i}", root, V((R.uniform(-0.4, 0.4), 0.6, 1.0)), R.uniform(0.05, 0.08), 0.016, R, droop=0.3, sides=4, segs=4))
+        cols.append(body * 1.2)
+    for obj, col in zip(parts, cols):
+        C.colorize(obj, lambda p, col=col: col)
+    return C.join(parts, "PebbloomTufts")
 
 
 def build_crystal():
@@ -257,11 +296,16 @@ def main():
     eyes, shines, nose = build_face()
     eye_mat = C.flat_material("PebbloomEye", (0.02, 0.015, 0.025), 0.05)
     shine_mat = C.flat_material("PebbloomShine", (1, 1, 1), 0.1, emission=(1, 1, 1), strength=1.5)
-    for e, sh, b in zip(eyes, shines, ("eyeR", "eyeL")):
-        e.data.materials.append(eye_mat)
+    iris_mat = C.vcol_material("PebbloomIris", 0.08)
+    for i, e in enumerate(eyes):
+        e.data.materials.append(eye_mat if i < 2 else iris_mat)
+        C.rigid_to_bone(e, "eyeR" if e.data.vertices[0].co.x < 0 else "eyeL")
+    for sh in shines:
         sh.data.materials.append(shine_mat)
-        C.rigid_to_bone(e, b)
-        C.rigid_to_bone(sh, b)
+        C.rigid_to_bone(sh, "eyeR" if sh.data.vertices[0].co.x < 0 else "eyeL")
+    tufts = build_tufts()
+    tufts.data.materials.append(C.vcol_material("PebbloomTuft", 0.85))
+    C.transfer_weights(tufts, body)
     nose.data.materials.append(C.vcol_material("PebbloomNose", 0.3))
     C.rigid_to_bone(nose, "head")
     crystal = build_crystal()
@@ -270,7 +314,7 @@ def main():
     bloom = build_bloom()
     bloom.data.materials.append(C.vcol_material("PebbloomPetal", 0.55))
     C.rigid_to_bone(bloom, "bloom")
-    model = C.join([body, plates, moss, *ears, *eyes, *shines, nose, crystal, bloom], "Pebbloom")
+    model = C.join([body, plates, moss, tufts, *ears, *eyes, *shines, nose, crystal, bloom], "Pebbloom")
     print("PEBBLOOM tris:", C.count_tris([model]))
     out = os.path.join(C.EXPORT_DIR, "pebbloom.glb")
     print("PEBBLOOM glb bytes:", C.export_glb(out, [model, arm]))

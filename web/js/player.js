@@ -105,7 +105,7 @@ class Avatar {
     else if (this.throw > 0) { this.throw -= dt; aR = quat(lerp(-170, -40, THREE.MathUtils.smoothstep(1 - clamp01(this.throw / 0.4), 0, 1)), 0, 10); }
     this.armL.quaternion.copy(aL);
     this.armR.quaternion.copy(aR);
-    let rootQ = new THREE.Quaternion(), ry = 0;
+    let rootQ = quat(0, 0, this.bank), ry = 0;
     if (this.dodge > 0) {
       this.dodge -= dt;
       const k = 1 - clamp01(this.dodge / 0.3);
@@ -139,42 +139,70 @@ class SkinnedAvatar {
 
   update(dt, t, s) {
     const P = this.pose;
-    const move = clamp01(s.speed / 7), walk = clamp01(s.speed / 1.2);
-    this.phase += dt * s.speed * (s.sneaking ? 3.4 : 2.6);
+    // Gait is driven by distance travelled (stride length), so feet plant instead of sliding.
+    this.runK = lerp(this.runK || 0, s.running ? clamp01((s.speed - 3.6) / 3) : 0, damp(5, dt));
+    this.gait = lerp(this.gait || 0, clamp01(s.speed / 1.1), damp(7, dt));
+    const stride = s.sneaking ? 1.3 : lerp(1.55, 2.6, this.runK);          // metres per full two-step cycle
+    if (s.grounded) this.phase += (s.speed / stride) * Math.PI * 2 * dt;
+    if (s.speed < 0.2) { // settle into a neutral stance when stopping
+      const target = Math.round(this.phase / Math.PI) * Math.PI;
+      this.phase += (target - this.phase) * Math.min(1, dt * 6);
+    }
     this.crouch += clamp((s.sneaking ? 1 : 0) - this.crouch, -dt * 5, dt * 5);
-    this.lean = lerp(this.lean, move * 10 + this.crouch * 16, damp(8, dt));
     this.defeat += clamp((s.dead ? 1 : 0) - this.defeat, -dt * 2.5, dt * 2.5);
-    const c = this.crouch, sin = Math.sin(this.phase), cos = Math.cos(this.phase);
-    const bob = s.grounded ? Math.abs(sin) * 0.05 * walk : 0;
+    const c = this.crouch, g = this.gait, r = this.runK;
+    const sin = Math.sin(this.phase), cos = Math.cos(this.phase);
     let squash = 0;
     if (this.land > 0) { this.land -= dt; squash = Math.sin(this.land / 0.15 * Math.PI) * 0.08; }
     let flinch = 0;
     if (this.hurt > 0) { this.hurt -= dt; flinch = Math.sin(this.hurt / 0.25 * Math.PI) * -16; }
-    P.offset('hips', 0, bob - c * 0.2 - squash - (s.wading ? 0.04 : 0), 0);
-    const twist = sin * 7 * move;
-    P.set('hips', 0, twist * 0.6, 0);
-    P.set('torso', this.lean + flinch, -twist, 0);
-    P.set('head', -this.lean * 0.6 - flinch * 0.3, twist * 0.5, 0);
 
-    // Legs: hip swing, knee bend on the forward swing, crouch keeps the feet planted.
-    const amp = lerp(26, 46, move) * walk * (1 - c * 0.45);
+    // Pelvis: bob twice per cycle (high over the planted foot), sway onto the stance leg, hip drop and twist.
+    const idle = 1 - g;
+    const bob = s.grounded ? (Math.cos(this.phase * 2) * lerp(0.022, 0.04, r)) * g : 0;
+    const swayX = cos * 0.028 * g * (1 - r * 0.5) + Math.sin(t * 0.55) * 0.012 * idle; // idle weight shift
+    P.offset('hips', swayX, bob - c * 0.2 - squash - (s.wading ? 0.04 : 0) - 0.01 * r, 0);
+    const hipYaw = sin * lerp(7, 10, r) * g;
+    P.set('hips', 0, hipYaw, cos * 3.5 * g);
+    // Torso: lean with speed and acceleration, counter-rotate the shoulders, breathe at rest.
+    const accelLean = clamp((s.accel || 0) * 1.1, -9, 10);
+    const lean = g * lerp(5, 13, r) + c * 16 + accelLean;
+    this.lean = lerp(this.lean, lean, damp(7, dt));
+    const breathe = Math.sin(t * 1.7) * 1.4 * idle;
+    P.set('torso', this.lean + flinch + breathe, -hipYaw * 1.7, -cos * 2 * g);
+    // Head: stays level and steady, looks into turns, glances around when idle.
+    const turnLook = clamp((s.turn || 0) * 9, -18, 18);
+    const glance = Math.sin(t * 0.37) * 14 * idle * (1 - c);
+    P.set('head', -this.lean * 0.75 - flinch * 0.3 - breathe * 0.5, hipYaw * 0.7 + turnLook + glance, 0);
+
+    // Legs: thigh swing, knee flex peaking mid-swing, heel strike / flat stance / toe-off at the ankle.
+    const thighAmp = (s.sneaking ? 24 : lerp(26, 46, r)) * g;
+    const kneeAmp = (s.sneaking ? 44 : lerp(52, 100, r)) * g;
     if (s.grounded) {
-      for (const [side, ph] of [['L', 0], ['R', Math.PI]]) {
-        const sw = Math.sin(this.phase + ph), lift = Math.max(0, Math.cos(this.phase + ph));
-        P.set(`leg${side}`, -sw * amp - c * 38 - this.lean * 0.3);
-        P.set(`shin${side}`, lift * amp * (1.2 - c * 0.6) + c * 62 + walk * 6);
-        P.set(`foot${side}`, -c * 22 - lift * 10);
+      for (const [side, off] of [['L', 0], ['R', Math.PI]]) {
+        const ph = this.phase + off, sp = Math.sin(ph), cp = Math.cos(ph);
+        const thigh = -sp * thighAmp - c * 38 - this.lean * 0.25;
+        const swing = Math.max(0, cp);                       // leg travelling forward
+        const knee = Math.pow(swing, 1.3) * kneeAmp + (1 - swing) * lerp(6, 16, r) * g + c * 62;
+        const heelToe = (-10 * Math.max(0, sp) + 24 * Math.max(0, -sp) * Math.max(0, cp + 0.2)) * g;
+        P.set(`leg${side}`, thigh);
+        P.set(`shin${side}`, knee);
+        P.set(`foot${side}`, heelToe - (thigh + knee) * 0.85 - c * 6);
       }
     } else {
       const k = s.vy > 0 ? 1 : 0.6;
       P.set('legL', -40 * k); P.set('shinL', 70 * k); P.set('footL', -10);
       P.set('legR', 15 * k); P.set('shinR', 35 * k); P.set('footR', 0);
     }
+    // Lean the whole body into turns, more at speed.
+    this.bank = lerp(this.bank || 0, clamp(-(s.turn || 0) * s.speed * 2.2, -16, 16), damp(6, dt));
+    const amp = thighAmp;
 
     // Arms: counter-swing, elbows soft; actions override the right (staff) arm.
-    const asw = sin * amp * 0.7;
-    let aL = [asw + c * 15, 0, 6 + (s.grounded ? 0 : 30)], aR = [-asw + c * 15, 0, -6 - (s.grounded ? 0 : 30)];
-    let fL = -12 - 18 * move, fR = -14 - 18 * move;
+    const asw = sin * lerp(0.8, 1.05, r) * amp;
+    // The right hand carries the staff, so that arm swings less and keeps the staff upright when running.
+    let aL = [asw + c * 15, 0, 6 + (s.grounded ? 0 : 30)], aR = [-asw * lerp(0.6, 0.35, r) + c * 15 - 8 * r, 0, -6 - (s.grounded ? 0 : 30)];
+    let fL = -14 - lerp(12, 70, r) * g - Math.max(0, -sin) * 12 * g, fR = -16 - lerp(10, 28, r) * g;
     if (this.strike > 0) {
       this.strike -= dt;
       const k = 1 - clamp01(this.strike / 0.42), w = k < 0.35 ? THREE.MathUtils.smoothstep(k / 0.35, 0, 1) : 1;
@@ -188,7 +216,7 @@ class SkinnedAvatar {
     P.set('forearmL', fL); P.set('forearmR', fR);
 
     // Root: dodge roll and defeat fall.
-    let rootQ = new THREE.Quaternion(), ry = 0;
+    let rootQ = quat(0, 0, this.bank), ry = 0;
     if (this.dodge > 0) {
       this.dodge -= dt;
       const k = 1 - clamp01(this.dodge / 0.3);
@@ -215,6 +243,7 @@ export class Player {
     this.sneaking = false; this.running = false; this.wading = false; this.noise = 0.2; this.speedPlanar = 0;
     this.moveSpeedMultiplier = 1; this.facingTarget = null; this.moveWorld = new THREE.Vector3();
     this.footDist = 0;
+    this.moveSpeed = 0; this.moveHeading = this.yaw; this.turnRate = 0; this.accelFwd = 0; // smoothed locomotion state
     this.health = new Health(this, Faction.Player, 100, 10, Element.Neutral);
     this.health.onDamaged.push((info) => this.onDamaged(info));
     this.group = new THREE.Group();
@@ -248,7 +277,7 @@ export class Player {
   }
 
   respawn(pos, yaw) {
-    this.position.copy(pos); this.yaw = yaw;
+    this.position.copy(pos); this.yaw = yaw; this.moveHeading = yaw; this.moveSpeed = 0; this.turnRate = 0; this.accelFwd = 0;
     this.velocity.set(0, 0, 0); this.vy = 0; this.knockback.set(0, 0, 0); this.forcedUntil = 0;
     this.health.canBeDamaged = true; this.health.setFraction(1); this.health.invulnerableUntil = 0;
     this.game.input.sneakToggled = false;
@@ -294,11 +323,22 @@ export class Player {
     if (this.vy > 0 && !(control && input.jumpHeld)) grav *= 1.8;
     if (!this.grounded) this.vy = Math.max(-40, this.vy + grav * dt);
 
-    const target = moveDir.clone().multiplyScalar(speed);
-    const ctrl = this.grounded ? 1 : 0.45;
-    const rate = (target.lengthSq() > this.velocity.lengthSq() ? 30 : 26) * ctrl * dt;
-    const diff = target.clone().sub(this.velocity);
-    if (diff.length() <= rate) this.velocity.copy(target); else this.velocity.addScaledVector(diff.normalize(), rate);
+    // Locomotion with momentum: speed and heading change at human-like rates instead of snapping.
+    const prevSpeed = this.moveSpeed;
+    const inputMag = Math.min(1, moveDir.length());
+    const desired = inputMag * speed;
+    let accel = desired > this.moveSpeed ? (this.running ? 11 : 14) : 20;   // m/s²: speed up gently, brake firmly
+    if (!this.grounded) accel *= 0.3;
+    if (inputMag > 0.05) {
+      const want = Math.atan2(moveDir.x, moveDir.z);
+      const d = ((want - this.moveHeading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      const turnDeg = this.grounded ? lerp(900, 360, clamp01((this.moveSpeed - 2) / 5)) : 220; // tighter turns when slow
+      if (Math.abs(d) > 2.3 && this.moveSpeed > 4.5) accel = 34;                             // plant and pivot on reversal
+      this.moveHeading += clamp(d, -turnDeg * toRad * dt, turnDeg * toRad * dt);
+    }
+    this.moveSpeed += clamp(desired - this.moveSpeed, -accel * dt, accel * dt);
+    this.velocity.set(Math.sin(this.moveHeading), 0, Math.cos(this.moveHeading)).multiplyScalar(this.moveSpeed);
+    this.accelFwd = lerp(this.accelFwd, (this.moveSpeed - prevSpeed) / Math.max(dt, 1e-3), damp(6, dt));
     const horiz = now < this.forcedUntil ? this.forced : this.velocity;
     const kl = this.knockback.length();
     if (kl > 0) this.knockback.multiplyScalar(Math.max(0, kl - 20 * dt) / kl);
@@ -319,15 +359,19 @@ export class Player {
       if (!this._edgeNote || now - this._edgeNote > 4) { this._edgeNote = now; Events.notify('The mountains are too steep to cross — for now.'); }
     }
 
+    // Body facing: follows the movement heading (so turns arc naturally) unless a target or dodge overrides it.
+    const prevYaw = this.yaw;
     let face = null;
     if (this.facingTarget) face = this.facingTarget.clone().sub(this.position);
     else if (now < this.forcedUntil) face = this.forced.clone();
-    else if (moveDir.lengthSq() > 0.01) face = moveDir.clone();
+    else if (this.moveSpeed > 0.15) face = new THREE.Vector3(Math.sin(this.moveHeading), 0, Math.cos(this.moveHeading));
     if (face && face.x * face.x + face.z * face.z > 1e-4) {
       const t = Math.atan2(face.x, face.z);
       const d = ((t - this.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI, max = 720 * toRad * dt;
-      this.yaw += clamp(d, -max, max);
+      this.yaw += clamp(d * Math.min(1, dt * 14), -max, max);
     }
+    const yawDelta = ((this.yaw - prevYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    this.turnRate = lerp(this.turnRate, yawDelta / Math.max(dt, 1e-3), damp(8, dt));
     this.speedPlanar = Math.hypot(this.position.x - before.x, this.position.z - before.z) / dt;
     let noise = this.speedPlanar < 0.2 ? 0.15 : this.sneaking ? 0.35 : this.running ? 1.15 : 0.7;
     if (!this.grounded) noise = Math.max(noise, 0.8);
@@ -346,7 +390,7 @@ export class Player {
       if (input.gameplayEnabled) this.updateCombat();
       this.updateBinder();
     }
-    this.avatar.update(dt, now, { speed: this.speedPlanar, grounded: this.grounded, sneaking: this.sneaking, wading: this.wading, vy: this.vy, dead: !this.alive });
+    this.avatar.update(dt, now, { speed: this.speedPlanar, grounded: this.grounded, sneaking: this.sneaking, wading: this.wading, vy: this.vy, dead: !this.alive, accel: this.accelFwd, turn: this.turnRate, running: this.running });
     this.group.position.copy(this.position);
     this.group.rotation.y = this.yaw;
   }

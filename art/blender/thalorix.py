@@ -187,6 +187,31 @@ def build_eyes():
     return [C.uv_sphere(f"eye{s}", (0.088 * s, -1.05, 1.43), (0.034, 0.022, 0.024), 12, 8) for s in (-1, 1)]
 
 
+def build_details():
+    """Fangs, chin tuft, brow ridges and fur feathering on the forearms and hocks."""
+    fur, fangs, brows = [], [], []
+    for s in (-1, 1):
+        root = J["muzzle"] + V((0.05 * s, -0.05, -0.07))
+        fangs.append(C.tube_from_points(f"fang{s}", [root, root + V((0, -0.005, -0.03)), root + V((0.003 * s, -0.012, -0.06))], [0.012, 0.008, 0.0015], sides=6))
+        a, b = V((0.035 * s, -1.03, 1.47)), V((0.14 * s, -0.99, 1.485))
+        brows.append(C.tube_from_points(f"brow{s}", [a, a.lerp(b, 0.5) + V((0, 0, 0.015)), b], [0.018, 0.022, 0.012], sides=6))
+        for leg, along in (("F", (1, 2)), ("H", (1, 2))):
+            pts = LEGS[f"{leg}{'L' if s > 0 else 'R'}"]
+            for i in range(9):
+                root = pts[along[0]].lerp(pts[along[1]], R.uniform(0.0, 0.8)) + V((0, 0.05 if leg == "F" else 0.06, 0))
+                fur.append(C.fur_clump(f"feather{leg}{s}{i}", root, V((0.25 * s, 1.0, -0.5)), R.uniform(0.08, 0.14), 0.02, R, droop=0.35, sides=4, segs=4))
+    for i in range(10):
+        root = V((R.uniform(-0.05, 0.05), -1.06 + R.uniform(-0.04, 0.04), 1.2))
+        fur.append(C.fur_clump(f"chin{i}", root, V((R.uniform(-0.2, 0.2), 0.3, -1.0)), R.uniform(0.07, 0.12), 0.018, R, droop=0.1, sides=4, segs=4))
+    f = C.join(fur, "ThalorixFeathering")
+    colorize(f, lambda p: V((0.012, 0.016, 0.012)))
+    t = C.join(fangs, "ThalorixFangs")
+    colorize(t, lambda p: V((0.75, 0.72, 0.62)))
+    br = C.join(brows, "ThalorixBrows")
+    colorize(br, lambda p: V((0.012, 0.014, 0.016)))
+    return f, t, br
+
+
 def build_claws():
     claws = []
     for name, pts in LEGS.items():
@@ -333,6 +358,10 @@ def main():
         e.data.materials.append(eye_mat)
         colorize(e, lambda p: V((1, 1, 1)))
     claws = build_claws()
+    feathering, fangs, brows = build_details()
+    feathering.data.materials.append(vcol_material("ThalorixMane", 0.8))
+    fangs.data.materials.append(vcol_material("ThalorixHorn", 0.35))
+    brows.data.materials.append(vcol_material("ThalorixClaw", 0.6))
     claws.data.materials.append(vcol_material("ThalorixClaw", 0.35))
 
     arm = C.build_armature("ThalorixRig", bones())
@@ -340,13 +369,16 @@ def main():
     print("THALORIX unweighted body verts:", unweighted)
     C.transfer_weights(mane, body)
     C.transfer_weights(claws, body)
+    C.transfer_weights(feathering, body)
+    C.rigid_to_bone(fangs, "head")
+    C.rigid_to_bone(brows, "head")
     C.rigid_to_bone(horns, "head")
     C.rigid_to_bone(crystal, "head")
     C.rigid_to_bone(ears[0], "earR")   # -X is the creature's right side (it faces -Y)
     C.rigid_to_bone(ears[1], "earL")
     C.rigid_to_bone(eyes[0], "eyeR")
     C.rigid_to_bone(eyes[1], "eyeL")
-    model = C.join([body, mane, horns, crystal, *ears, *eyes, claws], "Thalorix")
+    model = C.join([body, mane, horns, crystal, *ears, *eyes, claws, feathering, fangs, brows], "Thalorix")
     tris = C.count_tris([model])
     print("THALORIX tris:", tris)
 

@@ -326,7 +326,7 @@ class Game {
       if (this.world.sun.shadow.map) { this.world.sun.shadow.map.dispose(); this.world.sun.shadow.map = null; }
     }
     this.grassLayers = [1, 2, 3, 3][q];
-    this.grassDistance = [45, 60, 80, 120][q];
+    this.grassDistance = [40, 50, 70, 100][q];
     this.scene.fog.density = ArtStyle.stylized ? 0.0027 : 0.0036;
     this.renderer.toneMappingExposure = ArtStyle.stylized ? 0.6 : 0.55;
     this.postfx.setQuality(q);
@@ -381,6 +381,7 @@ class Game {
     }
     this.camera.update(realDt, this);
     const focus = this.state === 'title' ? this.world.playerSpawn : this.player.position;
+    this.updateGrassPushers();
     this.world.update(dt > 0 ? dt : (this.state === 'title' ? realDt : 0), this.camera3d.position, focus, this.grassLayers, this.grassDistance);
     this.audio.update(realDt, this.battle.inBattle && this.state === 'playing', this.world.daylight < 0.3, this.state === 'paused' || this.state === 'defeat');
     // Let foliage between the camera and the Warden dissolve instead of hiding them.
@@ -394,6 +395,27 @@ class Game {
     this.ui.updateHud(realDt);
     this.ui.renderPortrait(realDt);
     input.endFrame();
+  }
+
+  /** Grass parts around the Warden (and stays bent along a short trail) and around nearby creatures. */
+  updateGrassPushers() {
+    const list = [];
+    if (this.state !== 'title') {
+      const p = this.player.position;
+      list.push({ x: p.x, y: p.y, z: p.z, r: 0.85 });
+      const trail = this.grassTrail || (this.grassTrail = []);
+      if (!trail.length || Math.hypot(trail[0].x - p.x, trail[0].z - p.z) > 0.45) trail.unshift({ x: p.x, y: p.y, z: p.z, t: this.time });
+      while (trail.length > 6 || (trail.length && this.time - trail[trail.length - 1].t > 2.2)) trail.pop();
+      for (const q of trail) list.push({ x: q.x, y: q.y, z: q.z, r: 0.8 * (1 - (this.time - q.t) / 2.2) });
+    }
+    const cam = this.camera3d.position;
+    const near = this.creatures.filter((c) => c.position.distanceToSquared(cam) < 35 * 35)
+      .sort((a, b) => a.position.distanceToSquared(cam) - b.position.distanceToSquared(cam));
+    for (const c of near) {
+      if (list.length >= 16) break;
+      list.push({ x: c.position.x, y: c.position.y, z: c.position.z, r: (c.species.radius || 0.42) * 1.9 });
+    }
+    this.world.setGrassPushers(list);
   }
 
   /** Keeps the player and creatures from overlapping (simple circle separation). */

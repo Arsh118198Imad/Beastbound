@@ -11,6 +11,9 @@ import { createWater } from './render/water.js';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Models } from './render/models.js';
 import { ArtStyle } from './render/style.js';
+import { GrassField } from './render/grass.js';
+
+const GRASS_LAYER_REACH = [1, 0.55, 0.32];
 
 export const Layout = {
   size: 260,
@@ -562,8 +565,8 @@ export class World {
           const k = t / (tiers - 1);
           const ty = h + (1.8 + k * 5.4) * s;
           const R = (2.1 - k * 1.55) * s;
-          batch.add(coneCore, m.compose(new THREE.Vector3(x, ty - 0.5 * s, z), q, new THREE.Vector3(R * 0.55, 1.5 * s, R * 0.55)), dark(SW.pineDark, 0.6));
-          const n = Math.round(9 + (1 - k) * 9);
+          batch.add(coneCore, m.compose(new THREE.Vector3(x, ty - 0.5 * s, z), q, new THREE.Vector3(R * 0.38, 1.5 * s, R * 0.38)), dark(SW.pineDark, 0.45));
+          const n = Math.round(14 + (1 - k) * 12);
           for (let i = 0; i < n; i++) {
             const a = (i / n) * Math.PI * 2 + rng() * 0.5 + t;
             const out = new THREE.Vector3(Math.cos(a), -0.35 - rng() * 0.2, Math.sin(a)).normalize();
@@ -588,13 +591,13 @@ export class World {
         for (const b of blobs) {
           const c = new THREE.Vector3(x, h, z).addScaledVector(b.p, s);
           const r = b.r * s;
-          batch.add(core[rng.int(4)], m.compose(c, q, new THREE.Vector3(r * 0.78, r * 0.62, r * 0.78)), dark(main, 0.55));
-          const cards = Math.round(18 + b.r * 9);
+          batch.add(core[rng.int(4)], m.compose(c, q, new THREE.Vector3(r * 0.55, r * 0.45, r * 0.55)), dark(main, 0.4)); // hidden inner mass
+          const cards = Math.round(30 + b.r * 16);
           for (let i = 0; i < cards; i++) {
             const dir = new THREE.Vector3(rng() * 2 - 1, rng() * 1.6 - 0.5, rng() * 2 - 1).normalize();
             const cp = c.clone().add(new THREE.Vector3(dir.x * r, dir.y * r * 0.8, dir.z * r).multiplyScalar(rng.range(0.6, 1.0)));
             const col = (rng() < 0.45 ? light : main).clone().multiplyScalar(rng.range(0.8, 1.1) * (0.75 + 0.35 * Math.max(0, dir.y)));
-            leaves.addCard(cp, dir, rng.range(1.0, 1.5) * s, col, rng, (cp.y - h) / (6 * s));
+            leaves.addCard(cp, dir, rng.range(1.25, 1.85) * s, col, rng, (cp.y - h) / (6 * s));
           }
         }
       }
@@ -606,7 +609,8 @@ export class World {
     mesh.castShadow = mesh.receiveShadow = true;
     this.root.add(mesh);
     for (const [cards, tex] of [[leaves, leafTexture()], [needles, needleTexture()]]) {
-      const mat = new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, alphaTest: 0.42, side: THREE.DoubleSide, roughness: 0.75, metalness: 0 });
+      // alphaToCoverage keeps cut-out leaf edges crisp but antialiased under MSAA.
+      const mat = new THREE.MeshStandardMaterial({ map: tex, vertexColors: true, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.7, metalness: 0 });
       mat.onBeforeCompile = (shader) => {
         shader.uniforms.uTime = this.grassUniforms ? this.grassUniforms.uTime : (this.grassUniforms = { uTime: { value: 0 } }).uTime;
         shader.vertexShader = shader.vertexShader
@@ -660,13 +664,15 @@ export class World {
   }
 
   scatterGrass() {
+    // Instanced blades (render/grass.js): curved, sharp-tipped, textured in the shader, bent by wind and
+    // by anything walking through them. Chunks of 20 m x 3 layers allow distance and quality culling.
     const rng = this.rng, T = this.terrain;
-    const chunk = 40;
-    const batches = new Map();
-    const spacing = 1.0;
+    const chunk = 20, spacing = 0.62;
+    this.grassUniforms = this.grassUniforms || { uTime: { value: 0 } };
+    this.grassField = new GrassField();
+    this.grassField.uniforms.uTime = this.grassUniforms.uTime;
+    const buckets = new Map();
     let index = 0;
-    const up = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), tip = new THREE.Vector3();
-    const tmpN = new THREE.Vector3();
     for (let z = -100; z < 100; z += spacing) {
       for (let x = -100; x < 100; x += spacing) {
         index++;
@@ -674,49 +680,38 @@ export class World {
         if (Math.hypot(px, pz) > 98) continue;
         const h = T.heightAt(px, pz);
         if (h < 0.3 || h > 16 || T.slopeAt(px, pz) > 28) continue;
-        let density = 0.75 * (1 - T.pathMask(px, pz) * 0.9) * (1 - T.forestMask(px, pz) * 0.45);
+        let density = 0.8 * (1 - T.pathMask(px, pz) * 0.92) * (1 - T.forestMask(px, pz) * 0.45);
         if (this.nearLandmark(px, pz, 3, 5)) density *= 0.3;
         if (rng() > density) continue;
         const layer = index % 3;
-        const key = `${Math.floor(px / chunk)}_${Math.floor(pz / chunk)}_${layer}`;
-        if (!batches.has(key)) batches.set(key, { batch: new GeometryBatch('sway'), cx: (Math.floor(px / chunk) + 0.5) * chunk, cz: (Math.floor(pz / chunk) + 0.5) * chunk, layer });
-        const batch = batches.get(key).batch;
-        T.normalAt(px, pz, tmpN);
-        up.copy(tmpN).lerp(new THREE.Vector3(0, 1, 0), 0.6).normalize();
-        const variant = rng.int(SW.grassRoot.length);
-        const blades = 4 + rng.int(4);
+        const ix = Math.floor(px / chunk), iz = Math.floor(pz / chunk);
+        const key = `${ix}_${iz}_${layer}`;
+        if (!buckets.has(key)) buckets.set(key, { blades: [], cx: (ix + 0.5) * chunk, cz: (iz + 0.5) * chunk, layer });
+        const out = buckets.get(key).blades;
+        const variant = rng.int(SW.grassTip.length);
+        const tipCol = SW.grassTip[variant];
+        const lush = 1 - T.forestMask(px, pz) * 0.3;
+        const clumpH = rng.range(0.75, 1.25);
+        const blades = 6 + rng.int(5);
         for (let i = 0; i < blades; i++) {
-          const ang = rng() * Math.PI * 2;
-          const dx = Math.cos(ang), dz = Math.sin(ang);
-          const off = rng() * 0.18;
-          const bx = px + dx * off, bz = pz + dz * off, by = h - 0.03;
-          const height = rng.range(0.22, 0.62), width = rng.range(0.04, 0.08);
-          const lean = rng.range(0.05, 0.22);
-          a.set(bx - dz * width / 2, by, bz + dx * width / 2);
-          b.set(bx + dz * width / 2, by, bz - dx * width / 2);
-          tip.set(bx + dx * lean, by + height, bz + dz * lean);
-          batch.addTriangle(a, tip, b, up, SW.grassRoot[variant], SW.grassTip[variant], SW.grassRoot[variant], 0, height, 0);
+          const ang = rng() * Math.PI * 2, off = Math.sqrt(rng()) * 0.3;
+          const bx = px + Math.cos(ang) * off, bz = pz + Math.sin(ang) * off;
+          const k = rng.range(0.85, 1.12);
+          out.push(bx, T.heightAt(bx, bz) - 0.02, bz, ang + rng.range(-0.6, 0.6),
+            rng.range(0.24, 0.6) * clumpH * lush, rng.range(0.035, 0.065), rng.range(0.05, 0.32), rng(),
+            tipCol.r * k, tipCol.g * k, tipCol.b * k);
         }
       }
     }
-    this.grassUniforms = this.grassUniforms || { uTime: { value: 0 } };
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.85, metalness: 0 });
-    mat.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n      normal = normalize(vNormal); // both faces lit like the ground (no black back faces)');
-      shader.uniforms.uTime = this.grassUniforms.uTime;
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute float sway;\nuniform float uTime;')
-        .replace('#include <begin_vertex>', `#include <begin_vertex>
-          float w = sin(uTime*1.6 + position.x*0.35 + position.z*0.25) + 0.5*sin(uTime*3.1 + position.x*0.9);
-          transformed.x += w * 0.09 * sway; transformed.z += w * 0.05 * sway;`);
-    };
-    for (const g of batches.values()) {
-      const mesh = new THREE.Mesh(g.batch.build(), mat);
-      mesh.receiveShadow = true;
+    for (const g of buckets.values()) {
+      const mesh = this.grassField.buildChunk(g.blades, g.cx, g.cz, chunk);
       this.root.add(mesh);
       this.grassChunks.push({ mesh, cx: g.cx, cz: g.cz, layer: g.layer });
     }
   }
+
+  /** Things that part the grass: [{x, y, z, r}] (the Warden, its recent trail, nearby creatures). */
+  setGrassPushers(list) { if (this.grassField) this.grassField.setPushers(list); }
 
   scatterFlora() {
     const rng = this.rng, T = this.terrain;
@@ -837,8 +832,9 @@ export class World {
     this.water.material.uniforms.sunColor.value.copy(this.sunColor);
     // Grass culling by distance + quality layers
     for (const g of this.grassChunks) {
-      const d = Math.hypot(cameraPos.x - g.cx, cameraPos.z - g.cz) - 29;
-      g.mesh.visible = g.layer < grassLayers && d < grassDistance;
+      // Density falls off with distance: extra layers only near the camera (keeps laptops fast).
+      const d = Math.hypot(cameraPos.x - g.cx, cameraPos.z - g.cz) - 14;
+      g.mesh.visible = g.layer < grassLayers && d < grassDistance * GRASS_LAYER_REACH[g.layer];
     }
     // Ambient motes around the camera
     const night = this.daylight < 0.35, speed = night ? 0.25 : 0.12;
@@ -917,45 +913,93 @@ class CardBatch {
   }
 }
 
-/** Canvas-drawn cluster of leaves (white-ish, tinted per card by vertex colour). */
-function leafTexture(size = 256) {
+/** Canvas-drawn sprig of sharp, serrated leaves (near-white, tinted per card by vertex colour). */
+function leafTexture(size = 512) {
   const c = document.createElement('canvas'); c.width = c.height = size;
   const ctx = c.getContext('2d');
   const rng = makeRng(91);
-  for (let i = 0; i < 70; i++) {
-    const x = size * (0.12 + rng() * 0.76), y = size * (0.12 + rng() * 0.76);
-    const len = size * (0.07 + rng() * 0.06), wid = len * (0.42 + rng() * 0.15), ang = rng() * Math.PI * 2;
-    const g = Math.round(150 + rng() * 105);
+  const leaf = (x, y, len, wid, ang, tone) => {
     ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
-    ctx.fillStyle = `rgb(${g},${g},${Math.round(g * 0.92)})`;
-    ctx.beginPath(); ctx.moveTo(-len, 0); ctx.quadraticCurveTo(0, -wid, len, 0); ctx.quadraticCurveTo(0, wid, -len, 0); ctx.fill();
-    ctx.strokeStyle = `rgba(60,60,40,0.35)`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-len * 0.9, 0); ctx.lineTo(len * 0.9, 0); ctx.stroke();
+    // Outline: rounded base, widest at ~35%, long acute tip, small serrations along both edges.
+    const pts = (side) => {
+      const out = [];
+      for (let i = 0; i <= 14; i++) {
+        const t = i / 14;
+        let w = Math.sin(Math.pow(t, 0.75) * Math.PI) * (1 - t * 0.35) * wid;
+        if (i > 1 && i < 14) w *= i % 2 ? 1.0 : 0.86; // serrated edge
+        out.push([t * len, side * w]);
+      }
+      return out;
+    };
+    const top = pts(-1), bottom = pts(1).reverse();
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for (const [px, py] of top) ctx.lineTo(px, py);
+    for (const [px, py] of bottom) ctx.lineTo(px, py);
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, -wid, 0, wid);  // folded leaf: one half lighter
+    g.addColorStop(0, `rgb(${tone + 30},${tone + 30},${tone + 18})`);
+    g.addColorStop(0.5, `rgb(${tone},${tone},${tone - 12})`);
+    g.addColorStop(1, `rgb(${tone - 50},${tone - 48},${tone - 60})`);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = 'rgba(40,40,20,0.55)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(len * 0.96, 0); ctx.stroke();             // midrib
+    ctx.lineWidth = 0.7; ctx.strokeStyle = 'rgba(40,40,20,0.35)';
+    for (let k = 1; k <= 5; k++) {                                                          // side veins
+      const vx = len * k / 6.5;
+      for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(vx, 0); ctx.lineTo(vx + len * 0.12, sd * wid * 0.7 * (1 - k / 8)); ctx.stroke(); }
+    }
     ctx.restore();
+  };
+  // A few twigs, each carrying alternate leaves on short stalks.
+  for (let tw = 0; tw < 4; tw++) {
+    const x0 = size * (0.15 + rng() * 0.7), y0 = size * (0.85 + rng() * 0.1), ang0 = -Math.PI / 2 + (rng() - 0.5) * 1.2;
+    const L = size * (0.55 + rng() * 0.25);
+    ctx.strokeStyle = 'rgb(110,95,70)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0 + Math.cos(ang0) * L, y0 + Math.sin(ang0) * L); ctx.stroke();
+    for (let k = 0; k < 9; k++) {
+      const t = 0.12 + k * 0.1, side = k % 2 ? 1 : -1;
+      const bx = x0 + Math.cos(ang0) * L * t, by = y0 + Math.sin(ang0) * L * t;
+      const a = ang0 + side * (0.7 + rng() * 0.4);
+      const len = size * (0.12 + rng() * 0.06) * (1 - t * 0.35), wid = len * (0.26 + rng() * 0.06);
+      const sx = bx + Math.cos(a) * 8, sy = by + Math.sin(a) * 8;
+      ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(sx, sy); ctx.stroke(); // stalk
+      leaf(sx, sy, len, wid, a, Math.round(170 + rng() * 70));
+    }
+    leaf(x0 + Math.cos(ang0) * L, y0 + Math.sin(ang0) * L, size * 0.12, size * 0.032, ang0, 220); // terminal leaf
   }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   return t;
 }
 
-/** Canvas-drawn conifer twig with needles. */
-function needleTexture(size = 256) {
+/** Canvas-drawn conifer spray: branching twigs with fine, sharply tapered needles. */
+function needleTexture(size = 512) {
   const c = document.createElement('canvas'); c.width = c.height = size;
   const ctx = c.getContext('2d');
   const rng = makeRng(93);
-  ctx.lineCap = 'round';
-  for (let twig = 0; twig < 3; twig++) {
-    const x0 = size * (0.3 + twig * 0.2);
-    for (let y = size * 0.04; y < size * 0.96; y += 3) {
-      const t = y / size, spread = size * (0.06 + 0.18 * Math.sin(t * Math.PI));
-      for (const dir of [-1, 1]) {
-        const g = Math.round(140 + rng() * 115);
-        ctx.strokeStyle = `rgb(${g},${g},${Math.round(g * 0.9)})`;
-        ctx.lineWidth = 1.6;
-        ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + dir * spread * (0.6 + rng() * 0.4), y + spread * 0.5); ctx.stroke();
-      }
+  const needle = (x, y, ang, len, tone) => {
+    const w = 1.6, ca = Math.cos(ang), sa = Math.sin(ang);
+    ctx.fillStyle = `rgb(${tone},${tone},${Math.round(tone * 0.9)})`;
+    ctx.beginPath();
+    ctx.moveTo(x - sa * w, y + ca * w); ctx.lineTo(x + sa * w, y - ca * w); ctx.lineTo(x + ca * len, y + sa * len);
+    ctx.closePath(); ctx.fill();
+  };
+  const twig = (x, y, ang, len, depth) => {
+    const ex = x + Math.cos(ang) * len, ey = y + Math.sin(ang) * len;
+    for (let t = 0.04; t < 1; t += 0.035) {
+      const px = x + (ex - x) * t, py = y + (ey - y) * t;
+      const nl = size * 0.055 * (0.55 + 0.45 * Math.sin(Math.min(1, t * 1.2) * Math.PI)) * (depth ? 0.8 : 1);
+      for (const sd of [-1, 1]) needle(px, py, ang + sd * (0.55 + rng() * 0.25) - 0.25, nl * (0.8 + rng() * 0.3), Math.round(150 + rng() * 105));
     }
-    ctx.strokeStyle = 'rgb(120,100,80)'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, size); ctx.stroke();
-  }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    ctx.strokeStyle = 'rgb(105,85,62)'; ctx.lineWidth = depth ? 1.5 : 2.6;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
+    if (depth < 1) for (let k = 0; k < 4; k++) {
+      const t = 0.2 + k * 0.18, px = x + (ex - x) * t, py = y + (ey - y) * t;
+      twig(px, py, ang + (k % 2 ? 0.75 : -0.75), len * 0.38, depth + 1);
+    }
+  };
+  for (let i = 0; i < 2; i++) twig(size * (0.38 + i * 0.24), size * 0.98, -Math.PI / 2 + (i - 0.5) * 0.15, size * 0.92, 0);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   return t;
 }
 

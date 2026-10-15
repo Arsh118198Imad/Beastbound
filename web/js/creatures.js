@@ -165,8 +165,8 @@ export class CreatureAnimator {
 
 // Per-species tuning for the skinned models (Blender .glb) and their procedural animation.
 const MODEL_CFG = {
-  thalorix: { scale: 1.2, lieDrop: 0.6, bob: 0.05, hop: false, stride: 1, lieHead: 1 },   // a guardian: shoulder about the Warden's chest
-  pebbloom: { scale: 1.0, lieDrop: 0.2, bob: 0.08, hop: true, stride: 1.7, lieHead: 0.3 },  // hops like the original
+  thalorix: { scale: 1.2, lieDrop: 0.6, bob: 0.05, hop: false, strideLen: 2.3, lieHead: 1 },   // a guardian: shoulder about the Warden's chest
+  pebbloom: { scale: 1.0, lieDrop: 0.2, bob: 0.08, hop: true, strideLen: 0.95, lieHead: 0.3 },  // hops like the original
 };
 
 /** Picks the model for a species: Blender .glb when loaded, primitive Pebbloom otherwise. */
@@ -223,7 +223,10 @@ export class QuadrupedAnimator {
     this.smoothed = lerp(this.smoothed, this.speed, damp(8, dt));
     const move = clamp01(this.smoothed / Math.max(0.1, this.maxSpeed));
     const walk = clamp01(this.smoothed / 0.8);
-    if (this.smoothed > 0.05) this.phase += dt * (3.2 + this.smoothed * 1.5) * this.cfg.stride;
+    // Stride locked to ground distance (metres per gait cycle), so paws plant instead of sliding.
+    const strideLen = (this.cfg.strideLen || 1.5) * (1 + clamp01(this.smoothed / Math.max(0.1, this.maxSpeed)) * 0.45);
+    if (this.smoothed > 0.05) this.phase += (this.smoothed / strideLen) * Math.PI * 2 * dt;
+    this.turnS = lerp(this.turnS || 0, clamp(this.turn || 0, -4, 4), damp(6, dt));
     const sleeping = this.pose === 'Sleeping', exhausted = this.pose === 'Exhausted', low = sleeping || exhausted;
     this.blend += clamp((low ? 1 : 0) - this.blend, -dt * 1.6, dt * 1.6);
     this.windup += clamp((this.pose === 'Windup' ? 1 : 0) - this.windup, -dt * 6, dt * 6);
@@ -247,12 +250,14 @@ export class QuadrupedAnimator {
     else p.root.quaternion.identity();
 
     // Spine, neck and head.
+    // Spine: gait sway plus a bend into turns (C-curve), body rolls slightly toward the inside of a turn.
     const sway = Math.sin(this.phase) * 3 * walk * up;
-    this.set('hips', 0, sway, 0);
-    this.set('spine', -3 * W, -sway * 0.5, 0);
-    this.set('chest', 4 * W, -sway * 0.5, 0);
+    const bendT = this.turnS * 7 * up;
+    this.set('hips', 0, sway - bendT * 0.4, -this.turnS * 3 * walk);
+    this.set('spine', -3 * W, -sway * 0.5 + bendT * 0.5, 0);
+    this.set('chest', 4 * W + Math.sin(this.phase * 2) * 1.5 * walk, -sway * 0.5 + bendT * 0.6, 0);
     const look = Math.sin(t * 0.45) * 22 * (1 - move) * up * (1 - A);
-    const nod = Math.sin(this.phase * 2) * 3 * walk;
+    const nod = Math.sin(this.phase * 2 + 0.6) * 3 * walk; // head counters the body bob so the eyes stay steady
     const lh = cfg.lieHead;
     this.set('neck', -10 * A + 16 * W + (18 * L + (exhausted ? 22 * L : 0)) * lh + breathe * 1.5, look * 0.4, 0);
     this.set('head', nod - 6 * A + 12 * W + 10 * L * lh, look * 0.6, Math.sin(t * 0.3) * 3 * up + (sleeping ? 14 * L : 0));
@@ -266,14 +271,17 @@ export class QuadrupedAnimator {
     // Tail: wag with lag down the chain; raised when alert, low when resting.
     const wagSpeed = this.happy > 0 ? 14 : lerp(2, 7, move);
     const wagAmp = (this.happy > 0 ? 26 : lerp(9, 15, move)) * (1 - L * 0.7);
-    this.set('tail1', 16 * A - 14 * L + 8 * W, Math.sin(t * wagSpeed) * wagAmp * 0.5, 0);
+    this.set('tail1', 16 * A - 14 * L + 8 * W, Math.sin(t * wagSpeed) * wagAmp * 0.5 - this.turnS * 10, 0); // tail swings out of turns
     this.set('tail2', 6 * A - 10 * L, Math.sin(t * wagSpeed - 0.6) * wagAmp * 0.6, 0);
     this.set('tail3', -6 * L, Math.sin(t * wagSpeed - 1.2) * wagAmp * 0.8, 0);
 
-    // Legs: diagonal trot. Negative x swings a leg forward; lift bends the lower joints.
+    // Legs: four-beat walk (hind, fore, hind, fore) blending into a diagonal trot at speed.
+    // Negative x swings a leg forward; lift bends the lower joints.
     const amp = lerp(22, 34, move) * walk * up;
-    for (const [k, off] of [['FL', 0], ['HR', 0], ['FR', Math.PI], ['HL', Math.PI]]) {
-      const ph = this.phase + off;
+    const trot = THREE.MathUtils.smoothstep(move, 0.35, 0.6);
+    const offsets = { HL: lerp(0, Math.PI, trot), FL: lerp(Math.PI * 0.5, 0, trot), HR: lerp(Math.PI, 0, trot), FR: lerp(Math.PI * 1.5, Math.PI, trot) };
+    for (const k of ['FL', 'HR', 'FR', 'HL']) {
+      const ph = this.phase + offsets[k];
       const swing = -Math.sin(ph) * amp;
       const lift = Math.max(0, Math.cos(ph)) * walk * up;
       if (k[0] === 'F') {
@@ -394,18 +402,21 @@ export class Creature {
     let fx = 0, fz = 0;
     if (this.faceTarget) { fx = this.faceTarget.x - this.position.x; fz = this.faceTarget.z - this.position.z; }
     else if (this.velocity.lengthSq() > 0.05) { fx = this.velocity.x; fz = this.velocity.z; }
+    const yaw0 = this.yaw;
     if (!this.frozen && fx * fx + fz * fz > 1e-4) {
       const target = Math.atan2(fx, fz);
       let d = ((target - this.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
       const max = 540 * toRad * dt;
       this.yaw += clamp(d, -max, max);
     }
+    this.yawRate = (this.yaw - yaw0) / Math.max(dt, 1e-3);
     this.faceTarget = null;
     const moved = Math.hypot(this.position.x - before.x, this.position.z - before.z);
     this.speed = moved / dt;
     if (desired.lengthSq() > 0.25 && this.speed < desired.length() * 0.2) { this.stuckTimer += dt; if (this.stuckTimer > 1.2) this.stuck = true; }
     else { this.stuckTimer = 0; if (desired.lengthSq() > 0.25) this.stuck = false; }
     this.anim.speed = this.frozen ? 0 : this.speed;
+    this.anim.turn = this.yawRate || 0;
   }
   clearStuck() { this.stuck = false; this.stuckTimer = 0; }
 
